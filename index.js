@@ -1,55 +1,443 @@
-// Updated functions to create pages that follow the 2HourMan prompt structure exactly
+const express = require('express');
+const { Client } = require('@notionhq/client');
+const Anthropic = require('@anthropic-ai/sdk'); 
 
-// UPDATED: Generate tweets following the exact 2HourMan prompt structure
+const app = express();
+const PORT = process.env.PORT || 8000;
+
+// Middleware for parsing JSON bodies
+app.use(express.json());
+
+// Initialize clients (will use environment variables)
+const notion = new Client({ auth: process.env.NOTION_TOKEN });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// --- Environment Validation ---
+
+function validateEnvironment() {
+  const required = [
+    'NOTION_TOKEN',
+    'ANTHROPIC_API_KEY',
+    'EMAILS_DATABASE_ID',
+    'SHORTFORM_DATABASE_ID',
+    'CLAUDE_MODEL_NAME' 
+  ];
+
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+    return false;
+  }
+  
+  console.log('✅ All required environment variables found');
+  return true;
+}
+
+// --- Endpoints ---
+
+// Health check endpoint
+app.get('/', (req, res) => {
+  console.log('🏥 Health check requested');
+  
+  if (!validateEnvironment()) {
+    return res.status(500).json({ 
+      error: 'Missing environment variables',
+      status: 'unhealthy'
+    });
+  }
+
+  res.json({ 
+    message: 'Railway Email-to-Tweet Automation Server',
+    status: 'healthy',
+    version: '11.2 - Enhanced CTA with Newsletter Link',
+    endpoints: {
+      health: '/',
+      webhook: '/webhook'
+    },
+    config: {
+        notionToken: process.env.NOTION_TOKEN ? 'Set' : 'Missing',
+        anthropicKey: process.env.ANTHROPIC_API_KEY ? 'Set' : 'Missing',
+        emailDbId: process.env.EMAILS_DATABASE_ID ? 'Set' : 'Missing',
+        shortFormDbId: process.env.SHORTFORM_DATABASE_ID ? 'Set' : 'Missing',
+        modelName: process.env.CLAUDE_MODEL_NAME ? process.env.CLAUDE_MODEL_NAME : 'Missing',
+        promptPage: process.env.PROMPT_PAGE_ID || 'Default Prompt',
+        newsletterLink: process.env.NEWSLETTER_LINK || 'Not Set',
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Webhook endpoint for Notion database button
+app.post('/webhook', async (req, res) => {
+  try {
+    console.log('\n🔥 === NOTION BUTTON WEBHOOK RECEIVED ===');
+    console.log('🔍 Top-level Body Keys:', Object.keys(req.body)); 
+
+    let pageId = null;
+
+    // PRIMARY CHECK: The confirmed location for Page ID in Database Button Webhooks
+    if (req.body.data && req.body.data.id) {
+        pageId = req.body.data.id;
+        console.log(`✅ Page ID found in req.body.data.id: ${pageId}`);
+    } 
+    // FALLBACKS (Retained for robustness)
+    else if (req.body.page_id) {
+      pageId = req.body.page_id;
+      console.log(`📄 Page ID from page_id field (Fallback 1): ${pageId}`);
+    } else if (req.body.id) {
+      pageId = req.body.id;
+      console.log(`📄 Page ID from id field (Fallback 2): ${pageId}`);
+    } else if (req.body.notion_page_id) {
+      pageId = req.body.notion_page_id;
+      console.log(`📄 Page ID from notion_page_id field (Fallback 3): ${pageId}`);
+    } else {
+      // Deep search for a standard Notion ID format
+      for (const [key, value] of Object.entries(req.body)) {
+        if (typeof value === 'string' && 
+            (value.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/) || value.match(/^[a-f0-9]{32}$/))) {
+          pageId = value;
+          console.log(`📄 Page ID found via UUID search in ${key}: ${pageId}`);
+          break;
+        }
+      }
+    }
+
+    if (!pageId) {
+      console.log('❌ No page ID found in webhook payload');
+      return res.status(400).json({ 
+        error: 'No page ID found in webhook payload. Automation requires the triggering Page ID.',
+        received_keys: Object.keys(req.body)
+      });
+    }
+
+    // Acknowledge webhook immediately (crucial to prevent Notion timeout)
+    res.status(200).json({ 
+      message: 'Webhook received and processing started',
+      page_id: pageId,
+      timestamp: new Date().toISOString()
+    });
+
+    // Process the automation asynchronously so the response can be sent instantly
+    processEmailAutomation(pageId)
+      .then(result => {
+        console.log('✅ Automation completed successfully:', result);
+      })
+      .catch(error => {
+        console.error('❌ Automation failed:', error);
+      });
+
+  } catch (error) {
+    console.error('❌ Webhook error:', error);
+    return res.status(500).json({ 
+      error: 'Internal server error',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// --- Core Automation Functions ---
+
+// Main automation processing function
+async function processEmailAutomation(pageId) {
+  try {
+    console.log(`\n🚀 === STARTING AUTOMATION ===`);
+    console.log(`📄 Target Page ID: ${pageId}`);
+
+    // Step 1: Verify this page is in the E-mails database and retrieve properties
+    console.log('🔍 Step 1: Retrieving and verifying source page...');
+    
+    let pageInfo;
+    try {
+        pageInfo = await notion.pages.retrieve({ page_id: pageId });
+    } catch (e) {
+        if (e.code === 'object_not_found') {
+             throw new Error(`Notion Access Error: Could not find page ID ${pageId}. This usually means the page or its PARENT DATABASE is not shared with your integration.`);
+        }
+        throw e;
+    }
+    
+    const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '').toLowerCase(); 
+    const receivedDbId = pageInfo.parent.type === 'database_id' ? pageInfo.parent.database_id.replace(/-/g, '').toLowerCase() : 'Not a Database Page';
+    
+    console.log(`DEBUG: Expected DB ID: ${expectedDbId}`);
+    console.log(`DEBUG: Received DB ID: ${receivedDbId}`);
+    
+    // Check if page is in the correct database
+    if (!pageInfo.parent || 
+        pageInfo.parent.type !== 'database_id' || 
+        receivedDbId !== expectedDbId) {
+      console.log('ℹ️ Page is not in E-mails database - skipping automation');
+      return { status: 'skipped', reason: 'Page not in E-mails database' };
+    }
+
+    console.log('✅ Page confirmed to be in E-mails database');
+
+    // Step 2: Check if this email has already been processed
+    console.log('🔍 Step 2: Checking if email already processed...');
+    
+    const existingQuery = await notion.databases.query({
+      database_id: process.env.SHORTFORM_DATABASE_ID,
+      filter: {
+        property: 'E-mails',
+        relation: {
+          contains: pageId
+        }
+      }
+    });
+
+    if (existingQuery.results.length > 0) {
+      console.log(`ℹ️ Email already processed - found ${existingQuery.results.length} existing entries`);
+      return { status: 'skipped', reason: 'Email already processed' };
+    }
+
+    console.log('✅ Email not yet processed - continuing automation');
+
+    // Step 3: Get email content
+    console.log('📖 Step 3: Extracting email content...');
+    const emailContent = await getEmailContent(pageId);
+    console.log(`✅ Extracted ${emailContent.length} characters of content`);
+
+    // Step 4: Get processing prompt from Notion
+    console.log('📝 Step 4: Getting 2HourMan tweet prompt from Notion...');
+    const prompt = await getPromptFromNotion();
+    console.log('✅ 2HourMan tweet prompt retrieved from Notion');
+
+    // Step 5: Generate tweets using full 2HourMan structure with enhanced CTAs
+    console.log('🤖 Step 5: Generating tweet concepts with enhanced CTAs...');
+    const tweetsData = await generateTweetsWithFullStructure(emailContent, prompt);
+    console.log(`✅ Generated ${tweetsData.tweetConcepts.length} tweet concepts with customized CTAs`);
+
+    // Step 6: Create pages with complete 2HourMan structure
+    console.log('📝 Step 6: Creating full structure pages with enhanced CTAs...');
+    const createdPages = await createFullStructurePages(tweetsData, pageId);
+    console.log(`✅ Created ${createdPages.length} pages with complete structure`); 
+
+    console.log('🎉 === AUTOMATION COMPLETED ===');
+    return {
+      status: 'success',
+      email_page_id: pageId,
+      content_length: emailContent.length,
+      concepts_generated: tweetsData.tweetConcepts.length,
+      pages_created: createdPages.length,
+      timestamp: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('❌ Automation processing error:', error);
+    throw new Error(`Automation failed: ${error.message}`);
+  }
+}
+
+// Get email content from Notion page
+async function getEmailContent(pageId) {
+  try {
+    const response = await notion.blocks.children.list({
+      block_id: pageId,
+      page_size: 100
+    });
+
+    let content = '';
+    
+    for (const block of response.results) {
+      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
+        const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
+        content += text + '\n\n';
+      } 
+      else if (block.type.startsWith('heading') && block[block.type].rich_text.length > 0) {
+        const text = block[block.type].rich_text.map(text => text.plain_text).join('');
+        content += (block.type === 'heading_1' ? '# ' : block.type === 'heading_2' ? '## ' : '### ') + text + '\n\n';
+      } 
+      else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
+        const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
+        content += '• ' + text + '\n';
+      }
+      else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text.length > 0) {
+        const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
+        content += '1. ' + text + '\n';
+      }
+    }
+
+    if (!content.trim()) {
+      throw new Error('No readable content blocks found in the email page.');
+    }
+
+    return content.trim();
+  } catch (error) {
+    throw new Error(`Failed to fetch email content: ${error.message}`);
+  }
+}
+
+// ENHANCED: Get prompt from Notion page with CTA support
+async function getPromptFromNotion() {
+  try {
+    console.log(`🔍 Reading 2HourMan prompt from Notion page ID: ${process.env.PROMPT_PAGE_ID}`);
+    
+    if (!process.env.PROMPT_PAGE_ID) {
+      console.log('⚠️ No PROMPT_PAGE_ID set, using simplified fallback prompt');
+      return getSimplifiedPromptWithCTA();
+    }
+
+    const response = await notion.blocks.children.list({
+      block_id: process.env.PROMPT_PAGE_ID,
+      page_size: 100
+    });
+
+    console.log(`📄 Found ${response.results.length} blocks in prompt page`);
+
+    let prompt = '';
+    
+    for (const block of response.results) {
+      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
+        const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
+        prompt += text + '\n\n';
+      }
+      else if (block.type.startsWith('heading') && block[block.type].rich_text.length > 0) {
+        const text = block[block.type].rich_text.map(text => text.plain_text).join('');
+        prompt += (block.type === 'heading_1' ? '# ' : block.type === 'heading_2' ? '## ' : '### ') + text + '\n\n';
+      }
+      else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
+        const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
+        prompt += '• ' + text + '\n';
+      }
+      else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text.length > 0) {
+        const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
+        prompt += '1. ' + text + '\n';
+      }
+      else if (block.type === 'code' && block.code.rich_text.length > 0) {
+        const text = block.code.rich_text.map(text => text.plain_text).join('');
+        prompt += '```\n' + text + '\n```\n\n';
+      }
+    }
+
+    const finalPrompt = prompt.trim();
+    
+    if (!finalPrompt) {
+      console.log('⚠️ Prompt page appears to be empty, using simplified fallback');
+      return getSimplifiedPromptWithCTA();
+    }
+
+    console.log(`✅ Successfully extracted ${finalPrompt.length} characters from Notion prompt page`);
+    console.log(`📝 Prompt preview: ${finalPrompt.substring(0, 200)}...`);
+    
+    return finalPrompt;
+
+  } catch (error) {
+    console.error('❌ Error fetching prompt from Notion:', error);
+    console.log('🔄 Falling back to simplified prompt');
+    return getSimplifiedPromptWithCTA();
+  }
+}
+
+// Enhanced fallback prompt with CTA guidelines
+function getSimplifiedPromptWithCTA() {
+  return `You are a content extraction specialist for the 2 Hour Man brand. Transform content into high-quality tweets.
+
+For each tweet, ensure:
+
+1. SINGLE AHA MOMENT: One clear insight that everything builds toward
+2. WHAT-WHY-WHERE CYCLES:
+   - WHAT: Define the concept clearly (no jargon without explanation)
+   - WHY: Show why it matters (mechanism, not just naming)
+   - WHERE: Give clear direction on what to do
+
+3. CORE PRINCIPLES:
+   - Explain mechanisms, don't just name them
+   - Use actual concepts from source content
+   - No formulaic markers ("Result:", "Key takeaway:", etc.)
+   - Natural, conversational flow
+
+4. CTA REQUIREMENTS:
+   - Must be UNIQUE to the specific content just written
+   - Must reference the exact concept/aha moment from the tweet
+   - Must promise only what's actually in the source content
+   - Must end with the newsletter link - NO TEXT AFTER THE LINK
+   - Bridge naturally from the specific insight provided
+
+Create 3-5 tweet concepts. For each, provide complete structure including CTA.`;
+}
+
+// ENHANCED: Generate tweets with full structure and customized CTAs
 async function generateTweetsWithFullStructure(emailContent, prompt) {
   try {
+    // Extract CTA customization from your brand/newsletter info
+    const ctaCustomization = `
+CTA CUSTOMIZATION FOR 2HOURMAN:
+- Brand: 2 Hour Man (focus on efficiency and operational leverage)
+- Newsletter: Productivity and business automation insights
+- Target Audience: Business owners and entrepreneurs
+- Value Proposition: Compress operations, build systems, gain competitive advantage
+- Newsletter Link: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
+
+CTA MUST:
+1. Reference the SPECIFIC concept from the tweet (not generic)
+2. Bridge from the exact insight/aha moment provided
+3. Promise only what the newsletter actually covers
+4. End with the newsletter link - nothing after it
+5. Feel like the natural next step for THIS specific insight
+6. Use 2HourMan voice (efficiency-focused, systems-thinking)
+
+CTA EXAMPLES (customize for each specific concept):
+- "Understanding [specific concept] is one thing. Having a system that [specific application] is different. Get the complete framework: [NEWSLETTER_LINK]"
+- "If you're tired of [specific pain point from tweet], see how [specific solution approach]: [NEWSLETTER_LINK]"
+- "Most people know about [concept] but can't [specific implementation challenge]. Here's the system that actually works: [NEWSLETTER_LINK]"
+`;
+
     const fullPrompt = `${prompt}
+
+${ctaCustomization}
 
 SOURCE CONTENT TO ANALYZE:
 ${emailContent}
-
-NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 
 Please follow the 2HourMan methodology exactly as outlined above. For each tweet concept:
 
 1. Apply Phase 1: Content Analysis to identify 3-5 distinct tweet concepts
 2. For each concept, follow Phase 2: Sequential Tweet Development
-3. Use the exact output format specified in the prompt
+3. Create CTAs that are UNIQUE to each specific concept using the guidelines above
+4. Use the exact output format specified in the prompt
 
-Provide the complete structured analysis for each tweet concept, including:
-- Main Content (split into multiple posts if over 500 characters)
-- Single Aha Moment identification
-- What-Why-Where Cycle Check
-- Character counts for each post
-- CTA Tweet
-- All quality validation checks
+CRITICAL FOR CTA GENERATION:
+- Each CTA must reference the SPECIFIC concept/insight from that tweet
+- Must end with: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
+- NO text after the link
+- Promise only what your newsletter actually delivers
+- Bridge naturally from the specific insight provided
 
-Format exactly as specified in your methodology.`;
+Provide the complete structured analysis for each tweet concept, including customized CTAs.`;
 
-    console.log('\n📤 SENDING FULL STRUCTURE REQUEST TO CLAUDE:');
+    console.log('\n📤 SENDING FULL STRUCTURE REQUEST WITH CTA CUSTOMIZATION:');
     console.log('Full prompt length:', fullPrompt.length);
+    console.log('Newsletter link being used:', process.env.NEWSLETTER_LINK || 'https://your-newsletter.com');
 
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME,
-      max_tokens: 8000, // Increased for full analysis
+      max_tokens: 8000,
       messages: [{ role: 'user', content: fullPrompt }]
     });
 
     const content = response.content[0].text;
     
-    console.log('\n📥 CLAUDE RESPONSE WITH FULL STRUCTURE:');
+    console.log('\n📥 CLAUDE RESPONSE WITH CUSTOMIZED CTAS:');
     console.log('Response length:', content.length);
     console.log('First 500 characters:', content.substring(0, 500));
     
     // Parse the full structured response
     const tweetConcepts = parseFullStructuredResponse(content);
     
-    console.log(`✅ Successfully parsed ${tweetConcepts.length} tweet concepts with full structure`);
+    // Post-process CTAs to ensure newsletter link is included
+    tweetConcepts.forEach((concept, index) => {
+      concept.cta = ensureNewsletterLinkInCTA(concept.cta);
+      console.log(`✅ Processed CTA for concept ${index + 1}: ${concept.cta.substring(0, 100)}...`);
+    });
+    
+    console.log(`✅ Successfully parsed ${tweetConcepts.length} tweet concepts with customized CTAs`);
     
     return { tweetConcepts };
 
   } catch (error) {
-    console.error('❌ Error generating tweets with full structure:', error);
+    console.error('❌ Error generating tweets with customized CTAs:', error);
     
     // Fallback response
     return {
@@ -66,19 +454,69 @@ Format exactly as specified in your methodology.`;
           why: 'System encountered an error',
           where: 'Check logs for details'
         },
-        cta: 'Please check the system logs for details.',
+        cta: `Error generating content. Get reliable automation insights: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}`,
         qualityValidation: 'Error - validation not completed'
       }]
     };
   }
 }
 
-// ROBUST: Parse the full structured response from Claude
+// Helper function to ensure newsletter link is properly included in CTA
+function ensureNewsletterLinkInCTA(cta) {
+  try {
+    const newsletterLink = process.env.NEWSLETTER_LINK || 'https://your-newsletter.com';
+    
+    // Check if the CTA already has a proper link at the end
+    if (cta.endsWith(newsletterLink)) {
+      console.log('✅ CTA already has correct newsletter link at end');
+      return cta;
+    }
+    
+    // Check if CTA has any link placeholder that needs to be replaced
+    if (cta.includes('[NEWSLETTER_LINK]')) {
+      const updatedCTA = cta.replace('[NEWSLETTER_LINK]', newsletterLink);
+      console.log('✅ Replaced [NEWSLETTER_LINK] placeholder with actual link');
+      return updatedCTA;
+    }
+    
+    if (cta.includes('[link]')) {
+      const updatedCTA = cta.replace('[link]', newsletterLink);
+      console.log('✅ Replaced [link] placeholder with newsletter link');
+      return updatedCTA;
+    }
+    
+    // If no link found, append it properly
+    if (!cta.includes('http')) {
+      // Remove any trailing punctuation and add the link
+      const cleanCTA = cta.replace(/[.!?]*$/, '');
+      const finalCTA = `${cleanCTA}: ${newsletterLink}`;
+      console.log('✅ Added newsletter link to CTA that was missing it');
+      return finalCTA;
+    }
+    
+    // If it has some other link, replace with newsletter link
+    const linkPattern = /(https?:\/\/[^\s]+)/g;
+    if (cta.match(linkPattern)) {
+      const updatedCTA = cta.replace(linkPattern, newsletterLink);
+      console.log('✅ Replaced existing link with newsletter link');
+      return updatedCTA;
+    }
+    
+    return cta;
+    
+  } catch (error) {
+    console.error('❌ Error processing CTA link:', error);
+    // Fallback: append newsletter link
+    return `${cta}\n\nGet more insights: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}`;
+  }
+}
+
+// ENHANCED: Parse full structured response with CTA focus
 function parseFullStructuredResponse(content) {
   const tweetConcepts = [];
   
   try {
-    console.log('\n🔍 PARSING FULL STRUCTURED RESPONSE:');
+    console.log('\n🔍 PARSING FULL STRUCTURED RESPONSE WITH CTA FOCUS:');
     
     // Look for "TWEET #X:" pattern to identify concepts
     const conceptMatches = content.match(/TWEET\s*#\d+:[\s\S]*?(?=TWEET\s*#\d+:|$)/gi);
@@ -114,9 +552,14 @@ function parseFullStructuredResponse(content) {
           const charCountMatch = match.match(/Character Count[s]?:\s*([\s\S]*?)(?=\n\n---|CTA Tweet:|$)/i);
           const characterCounts = parseCharacterCounts(charCountMatch ? charCountMatch[1] : '', posts.length);
           
-          // Extract CTA tweet
-          const ctaMatch = match.match(/CTA Tweet:\s*([\s\S]*?)(?=\n\nCTA Uniqueness|CTA Uniqueness|Character Count|$)/i);
-          const cta = ctaMatch ? ctaMatch[1].trim() : 'CTA not found';
+          // Extract CTA tweet with enhanced parsing
+          const ctaMatch = match.match(/CTA Tweet:\s*([\s\S]*?)(?=\n\nCTA Uniqueness|CTA Uniqueness|Character Count|Quality Validation|$)/i);
+          let cta = ctaMatch ? ctaMatch[1].trim() : 'CTA not found';
+          
+          // Clean up CTA (remove extra formatting, ensure single line)
+          cta = cta.replace(/\n+/g, ' ').trim();
+          
+          console.log(`📝 Extracted CTA: ${cta.substring(0, 100)}...`);
           
           // Extract quality validation
           const qualityMatch = match.match(/Quality Validation:\s*([\s\S]*?)(?=\n\n|$)/i);
@@ -141,7 +584,7 @@ function parseFullStructuredResponse(content) {
         } catch (parseError) {
           console.error(`❌ Error parsing concept ${index + 1}:`, parseError);
           
-          // Add error concept
+          // Add error concept with fallback CTA
           tweetConcepts.push({
             number: index + 1,
             title: `Concept ${index + 1} - Parse Error`,
@@ -155,7 +598,7 @@ function parseFullStructuredResponse(content) {
               why: 'Parsing failed',
               where: 'Check logs for details'
             },
-            cta: 'Check logs for details',
+            cta: `Error parsing content. Get reliable automation insights: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}`,
             qualityValidation: 'Parse error - validation not completed'
           });
         }
@@ -177,7 +620,7 @@ function parseFullStructuredResponse(content) {
           why: 'Response format not recognized',
           where: 'Review Claude response structure'
         },
-        cta: 'Review the full response above for insights',
+        cta: `Get proven systems for business efficiency: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}`,
         qualityValidation: 'Fallback concept - manual review needed'
       });
     }
@@ -185,7 +628,7 @@ function parseFullStructuredResponse(content) {
   } catch (error) {
     console.error('❌ Complete parsing failure:', error);
     
-    // Final fallback
+    // Final fallback with working CTA
     tweetConcepts.push({
       number: 1,
       title: 'Parse Error',
@@ -199,12 +642,12 @@ function parseFullStructuredResponse(content) {
         why: 'Unexpected response format',
         where: 'Check system logs'
       },
-      cta: 'Check logs for technical details',
+      cta: `System error occurred. Get reliable automation content: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}`,
       qualityValidation: 'Error - validation not completed'
     });
   }
   
-  console.log(`📊 Final parsing result: ${tweetConcepts.length} concepts created`);
+  console.log(`📊 Final parsing result: ${tweetConcepts.length} concepts created with customized CTAs`);
   return tweetConcepts;
 }
 
@@ -272,12 +715,12 @@ function parseCharacterCounts(countText, expectedPosts) {
   }
 }
 
-// UPDATED: Create pages following the 2HourMan structure exactly
+// ENHANCED: Create pages following the complete 2HourMan structure
 async function createFullStructurePages(tweetsData, emailPageId) {
   try {
     const results = [];
 
-    console.log('\n📝 CREATING FULL STRUCTURE PAGES:');
+    console.log('\n📝 CREATING FULL STRUCTURE PAGES WITH ENHANCED CTAS:');
     console.log(`Processing ${tweetsData.tweetConcepts.length} tweet concepts...`);
 
     for (let i = 0; i < tweetsData.tweetConcepts.length; i++) {
@@ -286,6 +729,7 @@ async function createFullStructurePages(tweetsData, emailPageId) {
       console.log(`\n🧵 CREATING PAGE FOR CONCEPT ${i + 1}:`);
       console.log(`Title: ${concept.title}`);
       console.log(`Posts: ${concept.mainContent.posts.length}`);
+      console.log(`CTA: ${concept.cta.substring(0, 50)}...`);
 
       // Create blocks following the exact 2HourMan format
       const blocks = [];
@@ -544,13 +988,15 @@ async function createFullStructurePages(tweetsData, emailPageId) {
         console.log(`   Title: TWEET #${concept.number}: ${concept.title}`);
         console.log(`   Blocks added: ${blocks.length}`);
         console.log(`   Posts: ${concept.mainContent.posts.length}`);
+        console.log(`   CTA length: ${concept.cta.length} characters`);
         
         results.push({ 
           id: response.id, 
           title: `TWEET #${concept.number}: ${concept.title}`,
           blocks_count: blocks.length,
           posts_count: concept.mainContent.posts.length,
-          concept_number: concept.number
+          concept_number: concept.number,
+          cta_length: concept.cta.length
         });
 
       } catch (pageError) {
@@ -574,7 +1020,7 @@ async function createFullStructurePages(tweetsData, emailPageId) {
               paragraph: {
                 rich_text: [{
                   type: 'text',
-                  text: { content: `Error creating full structure page for concept ${i + 1}. Check logs for details.\n\nOriginal content:\n${concept.mainContent.posts.join('\n\n')}` }
+                  text: { content: `Error creating full structure page for concept ${i + 1}. Check logs for details.\n\nOriginal content:\n${concept.mainContent.posts.join('\n\n')}\n\nCTA: ${concept.cta}` }
                 }]
               }
             }]
@@ -591,7 +1037,7 @@ async function createFullStructurePages(tweetsData, emailPageId) {
       }
     }
 
-    console.log(`\n✅ COMPLETED: Created ${results.length} full structure pages`);
+    console.log(`\n✅ COMPLETED: Created ${results.length} full structure pages with enhanced CTAs`);
     return results;
 
   } catch (error) {
@@ -600,37 +1046,15 @@ async function createFullStructurePages(tweetsData, emailPageId) {
   }
 }
 
-// UPDATED: Main automation function to use full structure
-async function processEmailAutomation(pageId) {
-  try {
-    console.log(`\n🚀 === STARTING AUTOMATION ===`);
-    console.log(`📄 Target Page ID: ${pageId}`);
-
-    // Steps 1-4 remain the same...
-    // [Previous verification and content extraction code]
-
-    // Step 5: Generate tweets using full 2HourMan structure
-    console.log('🤖 Step 5: Generating tweet concepts with full 2HourMan methodology...');
-    const tweetsData = await generateTweetsWithFullStructure(emailContent, prompt);
-    console.log(`✅ Generated ${tweetsData.tweetConcepts.length} tweet concepts with full analysis`);
-
-    // Step 6: Create pages with complete 2HourMan structure
-    console.log('📝 Step 6: Creating full structure pages following 2HourMan format...');
-    const createdPages = await createFullStructurePages(tweetsData, pageId);
-    console.log(`✅ Created ${createdPages.length} pages with complete structure`); 
-
-    console.log('🎉 === AUTOMATION COMPLETED ===');
-    return {
-      status: 'success',
-      email_page_id: pageId,
-      content_length: emailContent.length,
-      concepts_generated: tweetsData.tweetConcepts.length,
-      pages_created: createdPages.length,
-      timestamp: new Date().toISOString()
-    };
-
-  } catch (error) {
-    console.error('❌ Automation processing error:', error);
-    throw new Error(`Automation failed: ${error.message}`);
-  }
+// Validate environment on startup
+if (!validateEnvironment()) {
+  console.error('❌ Server starting with missing environment variables. Functionality will be impaired.');
 }
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
+  console.log(`🔧 Version: 11.2 - Enhanced CTA with Newsletter Link`);
+  console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
+  console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
+});
