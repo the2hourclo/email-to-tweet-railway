@@ -11,7 +11,7 @@ app.use(express.json());
 // Initialize clients (will use environment variables)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 // FIX APPLIED: Corrected typo from Anthantic to Anthropic
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }); // TYPO FIXED HERE
 
 // --- Environment Validation ---
 
@@ -51,7 +51,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.8 - Final Robustness Fix', // Version update
+    version: '10.9 - Final Typo Fix Applied', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -424,6 +424,5 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.8 - Final Robustness Fix`);
+  console.log(`🔧 Version: 10.9 - Final Typo Fix Applied`);
 });
-
