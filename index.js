@@ -10,7 +10,8 @@ app.use(express.json());
 
 // Initialize clients (will use environment variables)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
-const anthropic = new Anthantic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// FIX APPLIED: Corrected typo from Anthantic to Anthropic
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // --- Environment Validation ---
 
@@ -49,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.3 - Final ID Consistency Fix', // Version update
+    version: '10.4 - Final Typo Fix Applied', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -167,13 +168,15 @@ async function processEmailAutomation(pageId) {
     // DEBUGGING LOG: Prints the IDs being compared
     console.log(`\nDEBUG: Comparing DB IDs:`);
     console.log(`DEBUG: Expected (ENV): ${expectedDbId}`);
-    console.log(`DEBUG: Received (Page Parent): ${pageInfo.parent.database_id.replace(/-/g, '').toLowerCase()}`); // Added toLowerCase()
+    // Extract the actual database ID from the page object parent and clean it for comparison
+    const receivedDbId = pageInfo.parent.type === 'database_id' ? pageInfo.parent.database_id.replace(/-/g, '').toLowerCase() : 'Not a Database Page';
+    console.log(`DEBUG: Received (Page Parent): ${receivedDbId}`);
     console.log(`DEBUG: The two IDs must match exactly (ignoring hyphens and case).\n`);
     
     // Check if page is in the correct database (case-insensitive check)
     if (!pageInfo.parent || 
         pageInfo.parent.type !== 'database_id' || 
-        pageInfo.parent.database_id.replace(/-/g, '').toLowerCase() !== expectedDbId) {
+        receivedDbId !== expectedDbId) {
       console.log('ℹ️ Page is not in E-mails database - skipping automation');
       return { status: 'skipped', reason: 'Page not in E-mails database' };
     }
@@ -410,7 +413,8 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.3 - Final ID Consistency Fix`);
+  console.log(`🔧 Version: 10.4 - Final Typo Fix Applied`);
 });
+
 
 
