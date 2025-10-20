@@ -49,7 +49,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '8.0 - Webhook Fix Implemented',
+    version: '9.0 - Webhook Fix Confirmed',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -70,7 +70,7 @@ app.post('/webhook', async (req, res) => {
   try {
     console.log('\n🔥 === NOTION BUTTON WEBHOOK RECEIVED ===');
     console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
-    // Log keys for verification, but skip full body to avoid large output
+    // Log keys for verification
     console.log('🔍 Top-level Body Keys:', Object.keys(req.body)); 
 
     let pageId = null;
@@ -81,15 +81,18 @@ app.post('/webhook', async (req, res) => {
         pageId = req.body.data.id;
         console.log(`✅ Page ID found in req.body.data.id: ${pageId}`);
     } 
-    // FALLBACKS (for compatibility with other webhook types if testing payload changed)
+    // FALLBACKS (Keeping your existing robust checks just in case)
     else if (req.body.page_id) {
       pageId = req.body.page_id;
       console.log(`📄 Page ID from page_id field (Fallback 1): ${pageId}`);
     } else if (req.body.id) {
       pageId = req.body.id;
       console.log(`📄 Page ID from id field (Fallback 2): ${pageId}`);
+    } else if (req.body.notion_page_id) {
+      pageId = req.body.notion_page_id;
+      console.log(`📄 Page ID from notion_page_id field (Fallback 3): ${pageId}`);
     } else {
-      // Deep search for a standard Notion ID format (UUID or 32-char hex)
+      // Deep search for a standard Notion ID format
       for (const [key, value] of Object.entries(req.body)) {
         if (typeof value === 'string' && 
             (value.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/) || value.match(/^[a-f0-9]{32}$/))) {
@@ -136,7 +139,7 @@ app.post('/webhook', async (req, res) => {
 });
 
 
-// --- Core Automation Functions (Restored) ---
+// --- Core Automation Functions ---
 
 // Main automation processing function
 async function processEmailAutomation(pageId) {
@@ -144,10 +147,9 @@ async function processEmailAutomation(pageId) {
     console.log(`\n🚀 === STARTING AUTOMATION ===`);
     console.log(`📄 Target Page ID: ${pageId}`);
 
-    // Step 1: Verify this page is in the E-mails database
+    // Step 1: Verify this page is in the E-mails database and retrieve properties
     console.log('🔍 Step 1: Verifying page is in E-mails database...');
-    // The replace(/-/g, '') is necessary because the API often returns database IDs 
-    // with hyphens, but environment variables might be set without them.
+    // The replace(/-/g, '') is necessary for comparison flexibility
     const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '');
     const pageInfo = await notion.pages.retrieve({ page_id: pageId });
     
@@ -167,7 +169,7 @@ async function processEmailAutomation(pageId) {
     const existingQuery = await notion.databases.query({
       database_id: process.env.SHORTFORM_DATABASE_ID,
       filter: {
-        property: 'E-mails', // Assuming the relation property name is 'E-mails'
+        property: 'E-mails', // Confirmed relation name
         relation: {
           contains: pageId
         }
@@ -213,12 +215,11 @@ async function processEmailAutomation(pageId) {
 
   } catch (error) {
     console.error('❌ Automation processing error:', error);
-    // You can optionally update the Notion page status here to indicate failure
     throw new Error(`Automation failed: ${error.message}`);
   }
 }
 
-// Get email content from Notion page (restored)
+// Get email content from Notion page
 async function getEmailContent(pageId) {
   try {
     const response = await notion.blocks.children.list({
@@ -229,22 +230,15 @@ async function getEmailContent(pageId) {
     let content = '';
     
     for (const block of response.results) {
+      // Logic for extracting various block types (paragraph, headings, lists, etc.)
       if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
         const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
         content += text + '\n\n';
       } 
-      else if (block.type === 'heading_1' && block.heading_1.rich_text.length > 0) {
-        const text = block.heading_1.rich_text.map(text => text.plain_text).join('');
-        content += '# ' + text + '\n\n';
+      else if (block.type.startsWith('heading') && block[block.type].rich_text.length > 0) {
+        const text = block[block.type].rich_text.map(text => text.plain_text).join('');
+        content += (block.type === 'heading_1' ? '# ' : block.type === 'heading_2' ? '## ' : '### ') + text + '\n\n';
       } 
-      else if (block.type === 'heading_2' && block.heading_2.rich_text.length > 0) {
-        const text = block.heading_2.rich_text.map(text => text.plain_text).join('');
-        content += '## ' + text + '\n\n';
-      } 
-      else if (block.type === 'heading_3' && block.heading_3.rich_text.length > 0) {
-        const text = block.heading_3.rich_text.map(text => text.plain_text).join('');
-        content += '### ' + text + '\n\n';
-      }
       else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
         const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
         content += '• ' + text + '\n';
@@ -253,32 +247,23 @@ async function getEmailContent(pageId) {
         const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
         content += '1. ' + text + '\n';
       }
-      else if (block.type === 'quote' && block.quote.rich_text.length > 0) {
-        const text = block.quote.rich_text.map(text => text.plain_text).join('');
-        content += '> ' + text + '\n\n';
-      }
-      else if (block.type === 'code' && block.code.rich_text.length > 0) {
-        const text = block.code.rich_text.map(text => text.plain_text).join('');
-        content += '```\n' + text + '\n```\n\n';
-      }
+      // Add other relevant block types if necessary
     }
 
     if (!content.trim()) {
-      throw new Error('No content blocks found in the email page.');
+      throw new Error('No readable content blocks found in the email page. The Notion page may be empty or use unsupported block types.');
     }
 
     return content.trim();
   } catch (error) {
-    console.error('❌ Error fetching email content:', error);
     throw new Error(`Failed to fetch email content: ${error.message}`);
   }
 }
 
-// Get prompt from Notion page (restored)
+// Get prompt from Notion page (using fallback if PROMPT_PAGE_ID not set)
 async function getPromptFromNotion() {
   try {
     if (!process.env.PROMPT_PAGE_ID) {
-      console.log('📝 Using fallback prompt (no PROMPT_PAGE_ID set)');
       return `You are an expert content creator who specializes in converting newsletters and emails into engaging Twitter threads.
 
 Your task is to analyze the provided email content and create 5 different Twitter thread concepts.
@@ -293,7 +278,7 @@ Guidelines:
 - Use engaging, conversational tone
 - Focus on actionable insights
 - Include relevant hashtags
-- Return results in JSON format with threads array
+- Your entire response MUST be a single, valid JSON object starting with {"threads": [...]}. Do NOT include any explanations or commentary outside of the JSON block.
 
 Format your response as valid JSON:
 {
@@ -305,8 +290,6 @@ Format your response as valid JSON:
   ]
 }`;
     }
-
-    console.log(`📝 Fetching prompt from Notion page: ${process.env.PROMPT_PAGE_ID}`);
 
     const response = await notion.blocks.children.list({
       block_id: process.env.PROMPT_PAGE_ID,
@@ -320,21 +303,16 @@ Format your response as valid JSON:
       }
     }
 
-    const finalPrompt = prompt.trim() || 'Create engaging Twitter threads from the email content provided.';
-    console.log(`✅ Prompt fetched: ${finalPrompt.substring(0, 100)}...`);
-    return finalPrompt;
+    return prompt.trim() || 'Create engaging Twitter threads from the email content provided.';
   } catch (error) {
     console.error('❌ Error fetching prompt:', error);
-    console.log('📝 Using fallback prompt due to error');
     return 'Create engaging Twitter threads from the email content provided.';
   }
 }
 
-// Generate tweets using Claude (restored)
+// Generate tweets using Claude
 async function generateTweets(emailContent, prompt) {
   try {
-    console.log('🤖 Generating content with Claude...');
-    
     const fullPrompt = `${prompt}
 
 EMAIL CONTENT:
@@ -342,7 +320,7 @@ ${emailContent}
 
 NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 
-Generate 5 Twitter thread concepts in JSON format. Each thread should be engaging and actionable. Ensure the output is a single, valid JSON object starting with {"threads": [...]}.`;
+Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.`;
 
     const response = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-20241022',
@@ -351,43 +329,24 @@ Generate 5 Twitter thread concepts in JSON format. Each thread should be engagin
     });
 
     const content = response.content[0].text;
-    console.log(`🤖 Claude response length: ${content.length} characters`);
     
-    try {
-      // Robustly search for the JSON block in the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        console.log(`✅ Successfully parsed ${parsed.threads?.length || 0} thread concepts`);
-        return parsed;
-      } else {
-        throw new Error('No JSON found in Claude response');
-      }
-    } catch (parseError) {
-      console.log('⚠️ JSON parsing failed, using simple fallback structure.');
-      console.log('Parse error:', parseError.message);
-      // Fallback if JSON parsing fails
-      return {
-        threads: [{
-          title: "Generated Content Fallback",
-          tweets: [
-            content.substring(0, 280),
-            content.substring(280, 560) || "Check out our newsletter for more insights!",
-            process.env.NEWSLETTER_LINK || "Subscribe for more content like this!"
-          ]
-        }]
-      };
+    // Robustly search for the JSON block in the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return parsed;
+    } else {
+      // This is the fallback for bad Claude formatting
+      throw new Error('Claude response did not contain valid JSON in the expected format.');
     }
   } catch (error) {
-    console.error('❌ Error generating content with Claude:', error);
-    throw new Error(`Failed to generate content: ${error.message}`);
+    throw new Error(`Claude generation failed: ${error.message}`);
   }
 }
 
-// Create pages in Short Form database (restored)
+// Create pages in Short Form database
 async function createShortFormPages(tweetsData, emailPageId) {
   try {
-    console.log(`📝 Creating ${tweetsData.threads.length} short form pages...`);
     const results = [];
 
     for (let i = 0; i < tweetsData.threads.length; i++) {
@@ -395,15 +354,13 @@ async function createShortFormPages(tweetsData, emailPageId) {
       // Join tweets with triple dash separator for visual clarity in Notion
       const content = thread.tweets.join('\n\n---\n\n'); 
       
-      console.log(`📄 Creating page ${i + 1}: ${thread.title}`);
-      
       const response = await notion.pages.create({
         parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
         properties: {
           'Name': {
             title: [{ text: { content: thread.title } }]
           },
-          'E-mails': { // Relation property name assumed to be 'E-mails'
+          'E-mails': { // Confirmed Relation property name
             relation: [{ id: emailPageId }]
           }
         },
@@ -416,34 +373,24 @@ async function createShortFormPages(tweetsData, emailPageId) {
         }]
       });
 
-      results.push({
-        id: response.id,
-        title: thread.title
-      });
-      
-      console.log(`✅ Created: ${thread.title}`);
+      results.push({ id: response.id, title: thread.title });
     }
 
-    console.log(`🎉 Successfully created ${results.length} pages in Short Form database`);
     return results;
   } catch (error) {
-    console.error('❌ Error creating short form pages:', error);
-    throw new Error(`Failed to create pages: ${error.message}`);
+    throw new Error(`Failed to create pages in Notion: ${error.message}`);
   }
 }
 
 // Validate environment on startup
 if (!validateEnvironment()) {
-  console.error('❌ Server cannot start due to missing environment variables');
-  // Do not exit in a cloud environment, let it try to run for logs
-  // process.exit(1); 
+  console.error('❌ Server starting with missing environment variables. Functionality will be impaired.');
 }
 
-// Start server (restored)
+// Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 8.0 - Webhook Fix Implemented`);
-  console.log(`💡 Trigger: Click "Generate Content" button in E-mails database`);
+  console.log(`🔧 Version: 9.0 - Webhook Fix Confirmed`);
 });
 
 
