@@ -23,11 +23,12 @@ app.get('/', (req, res) => {
       promptPage: process.env.PROMPT_PAGE_ID ? '✅ Set' : '❌ Missing',
       newsletterLink: process.env.NEWSLETTER_LINK ? '✅ Set' : '❌ Missing'
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    version: '4.0 - Fixed Integration Webhooks'
   });
 });
 
-// Webhook endpoint - handles BOTH verification and Integration webhooks
+// Webhook endpoint - handles Integration webhooks based on ACTUAL Notion API documentation
 app.post('/webhook', async (req, res) => {
   try {
     console.log('=== WEBHOOK RECEIVED ===');
@@ -40,7 +41,6 @@ app.post('/webhook', async (req, res) => {
       console.log('🔐 VERIFICATION TOKEN RECEIVED');
       console.log('Token:', req.body.verification_token);
       
-      // Send success response for verification
       res.status(200).json({ 
         success: true, 
         message: 'Verification token received',
@@ -51,75 +51,83 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // STEP 2: Handle Integration Webhook Events (page updates)
-    if (req.body.object === 'event' && req.body.event) {
+    // STEP 2: Handle Integration Webhook Events - FIXED based on actual API docs
+    if (req.body.entity && req.body.entity.type === 'page') {
       console.log('📄 INTEGRATION WEBHOOK EVENT RECEIVED');
       
-      const event = req.body.event;
-      const pageId = event.id;
+      const pageId = req.body.entity.id; // CORRECT: entity.id is the page ID
       const eventType = req.body.type;
       
       console.log('Event Type:', eventType);
       console.log('Page ID:', pageId);
+      console.log('Entity Type:', req.body.entity.type);
       
       if (!pageId) {
-        throw new Error('No page ID found in Integration webhook event');
+        throw new Error('No page ID found in Integration webhook entity');
       }
 
-      // Process the email page
-      console.log('🚀 Starting email processing...');
-      
-      // Get email content from the page
-      console.log('📖 Fetching email content...');
-      const emailContent = await getEmailContent(pageId);
-      
-      // Get prompt from Notion page
-      console.log('📝 Fetching prompt...');
-      const prompt = await getPromptFromNotion();
-      
-      // Generate tweets using Claude
-      console.log('🤖 Generating tweets...');
-      const tweetsData = await generateTweets(emailContent, prompt);
-      
-      // Create pages in Short Form database
-      console.log('📄 Creating short form pages...');
-      const results = await createShortFormPages(tweetsData, pageId);
-      
-      console.log('🎉 SUCCESS! Created', results.length, 'short form pages');
-      
-      res.status(200).json({
-        success: true,
-        message: `Successfully created ${results.length} short form pages`,
-        pageId: pageId,
-        results: results,
-        timestamp: new Date().toISOString()
-      });
-      
-      return;
+      // Only process page.properties_updated events (when user checks "Generate Content")
+      if (eventType === 'page.properties_updated') {
+        console.log('🎯 Processing page.properties_updated event');
+        
+        // Process the email page
+        console.log('🚀 Starting email processing...');
+        
+        // Get email content from the page
+        console.log('📖 Fetching email content...');
+        const emailContent = await getEmailContent(pageId);
+        
+        // Get prompt from Notion page
+        console.log('📝 Fetching prompt...');
+        const prompt = await getPromptFromNotion();
+        
+        // Generate tweets using Claude
+        console.log('🤖 Generating tweets...');
+        const tweetsData = await generateTweets(emailContent, prompt);
+        
+        // Create pages in Short Form database
+        console.log('📄 Creating short form pages...');
+        const results = await createShortFormPages(tweetsData, pageId);
+        
+        console.log('🎉 SUCCESS! Created', results.length, 'short form pages');
+        
+        res.status(200).json({
+          success: true,
+          message: `Successfully created ${results.length} short form pages`,
+          pageId: pageId,
+          eventType: eventType,
+          results: results,
+          timestamp: new Date().toISOString()
+        });
+        
+        return;
+      } else {
+        console.log(`ℹ️ Ignoring event type: ${eventType} (only processing page.properties_updated)`);
+        res.status(200).json({
+          success: true,
+          message: `Event ${eventType} received but not processed`,
+          pageId: pageId,
+          note: 'Only page.properties_updated events trigger content generation',
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
     }
 
-    // STEP 3: Handle Legacy Button Webhooks (fallback)
-    if (req.body.type === 'automation') {
-      console.log('🔲 BUTTON WEBHOOK RECEIVED (Legacy)');
-      console.log('⚠️  Button webhooks do not provide page IDs automatically');
-      console.log('💡 Recommendation: Use Integration Webhooks instead for automatic page IDs');
-      
-      res.status(400).json({
-        error: 'Button webhooks not supported',
-        message: 'Please use Integration Webhooks or add Page ID to your button payload',
-        recommendation: 'Switch to Integration Webhooks for automatic page ID detection',
-        timestamp: new Date().toISOString()
-      });
-      
-      return;
-    }
-
-    // STEP 4: Unknown webhook format
+    // STEP 3: Handle unknown webhook formats
     console.log('❓ Unknown webhook format received');
+    console.log('Expected: Integration webhook with entity.type = "page"');
+    
     res.status(400).json({
       error: 'Unknown webhook format',
-      message: 'Webhook must be either verification token or Integration webhook event',
-      receivedFormat: req.body.object || req.body.type || 'unknown',
+      message: 'Webhook must be Integration webhook with page entity',
+      received: {
+        hasEntity: !!req.body.entity,
+        entityType: req.body.entity?.type,
+        eventType: req.body.type,
+        hasVerificationToken: !!req.body.verification_token
+      },
+      expected: 'Integration webhook with entity.type = "page" and type = "page.properties_updated"',
       timestamp: new Date().toISOString()
     });
 
@@ -129,6 +137,7 @@ app.post('/webhook', async (req, res) => {
     res.status(500).json({
       error: 'Webhook processing failed',
       message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       timestamp: new Date().toISOString()
     });
   }
@@ -358,7 +367,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}`);
   console.log(`🎯 Webhook endpoint: http://localhost:${PORT}/webhook`);
-  console.log(`🔧 Version: 3.0 - Integration Webhooks + Button Webhook Support`);
+  console.log(`🔧 Version: 4.0 - Fixed Integration Webhooks (entity.id)`);
   console.log(`📊 Enhanced logging enabled for debugging`);
   console.log(`🔐 Supports verification tokens and Integration webhook events`);
 });
