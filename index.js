@@ -34,13 +34,25 @@ app.get('/', (req, res) => {
   });
 });
 
-// Main webhook endpoint
+// Main webhook endpoint with debug logging
 app.post('/webhook', async (req, res) => {
   try {
+    console.log('=== WEBHOOK RECEIVED ===');
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('Query params:', JSON.stringify(req.query, null, 2));
+    console.log('========================');
+    
     const { page_id } = req.body;
     
     if (!page_id) {
-      return res.status(400).json({ error: 'Missing page_id in request body' });
+      console.log('ERROR: No page_id found in request body');
+      console.log('Available keys in body:', Object.keys(req.body));
+      return res.status(400).json({ 
+        error: 'Missing page_id in request body',
+        received_keys: Object.keys(req.body),
+        body: req.body
+      });
     }
 
     console.log(`Processing email page: ${page_id}`);
@@ -78,41 +90,75 @@ app.post('/webhook', async (req, res) => {
 
 // Get email content from Notion page
 async function getEmailContent(pageId) {
-  const response = await notion.blocks.children.list({
-    block_id: pageId,
-    page_size: 100
-  });
+  try {
+    const response = await notion.blocks.children.list({
+      block_id: pageId,
+      page_size: 100
+    });
 
-  let content = '';
-  for (const block of response.results) {
-    if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
-      content += block.paragraph.rich_text.map(text => text.plain_text).join('') + '\n';
+    let content = '';
+    for (const block of response.results) {
+      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
+        content += block.paragraph.rich_text.map(text => text.plain_text).join('') + '\n';
+      }
     }
-  }
 
-  return content.trim();
+    if (!content.trim()) {
+      throw new Error('No content found in the email page');
+    }
+
+    return content.trim();
+  } catch (error) {
+    console.error('Error fetching email content:', error);
+    throw new Error(`Failed to fetch email content: ${error.message}`);
+  }
 }
 
 // Get prompt from Notion page
 async function getPromptFromNotion() {
-  const response = await notion.blocks.children.list({
-    block_id: process.env.PROMPT_PAGE_ID,
-    page_size: 100
-  });
+  try {
+    if (!process.env.PROMPT_PAGE_ID) {
+      // Fallback prompt if no page ID provided
+      return `You are an expert content creator who specializes in converting newsletters and emails into engaging Twitter threads.
 
-  let prompt = '';
-  for (const block of response.results) {
-    if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
-      prompt += block.paragraph.rich_text.map(text => text.plain_text).join('') + '\n';
+Your task is to analyze the provided email content and create 5-7 different Twitter thread concepts.
+
+For each thread concept, provide:
+1. A compelling hook tweet (thread starter)
+2. 3-5 follow-up tweets that develop the idea
+3. A clear call-to-action
+
+Guidelines:
+- Keep each tweet under 280 characters
+- Use engaging, conversational tone
+- Focus on actionable insights
+- Return results in JSON format with threads array`;
     }
-  }
 
-  return prompt.trim();
+    const response = await notion.blocks.children.list({
+      block_id: process.env.PROMPT_PAGE_ID,
+      page_size: 100
+    });
+
+    let prompt = '';
+    for (const block of response.results) {
+      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
+        prompt += block.paragraph.rich_text.map(text => text.plain_text).join('') + '\n';
+      }
+    }
+
+    return prompt.trim() || 'Create engaging Twitter threads from the email content provided.';
+  } catch (error) {
+    console.error('Error fetching prompt:', error);
+    // Return fallback prompt if page fetch fails
+    return 'Create engaging Twitter threads from the email content provided.';
+  }
 }
 
 // Generate tweets using Claude
 async function generateTweets(emailContent, prompt) {
-  const fullPrompt = `${prompt}
+  try {
+    const fullPrompt = `${prompt}
 
 EMAIL CONTENT:
 ${emailContent}
@@ -129,61 +175,70 @@ Generate 5-7 Twitter thread concepts in JSON format:
   ]
 }`;
 
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: fullPrompt }]
-  });
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: fullPrompt }]
+    });
 
-  const content = response.content[0].text;
-  
-  try {
-    return JSON.parse(content);
-  } catch (e) {
-    // Fallback if JSON parsing fails
-    return {
-      threads: [{
-        title: "Generated Content",
-        tweets: [content]
-      }]
-    };
+    const content = response.content[0].text;
+    
+    try {
+      return JSON.parse(content);
+    } catch (e) {
+      // Fallback if JSON parsing fails
+      return {
+        threads: [{
+          title: "Generated Content",
+          tweets: [content]
+        }]
+      };
+    }
+  } catch (error) {
+    console.error('Error generating tweets:', error);
+    throw new Error(`Failed to generate tweets: ${error.message}`);
   }
 }
 
 // Create pages in Short Form database
 async function createShortFormPages(tweetsData, emailPageId) {
-  const results = [];
+  try {
+    const results = [];
 
-  for (const thread of tweetsData.threads) {
-    const content = thread.tweets.join('\n\n');
-    
-    const response = await notion.pages.create({
-      parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
-      properties: {
-        'Name': {
-          title: [{ text: { content: thread.title } }]
+    for (const thread of tweetsData.threads) {
+      const content = thread.tweets.join('\n\n');
+      
+      const response = await notion.pages.create({
+        parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
+        properties: {
+          'Name': {
+            title: [{ text: { content: thread.title } }]
+          },
+          'E-mails': {
+            relation: [{ id: emailPageId }]
+          }
         },
-        'E-mails': {
-          relation: [{ id: emailPageId }]
-        }
-      },
-      children: [{
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [{ type: 'text', text: { content: content } }]
-        }
-      }]
-    });
+        children: [{
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [{ type: 'text', text: { content: content } }]
+          }
+        }]
+      });
 
-    results.push({
-      id: response.id,
-      title: thread.title,
-      url: response.url
-    });
+      results.push({
+        id: response.id,
+        title: thread.title,
+        url: response.url
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Error creating short form pages:', error);
+    throw new Error(`Failed to create pages: ${error.message}`);
   }
-
-  return results;
 }
 
 // Start server
