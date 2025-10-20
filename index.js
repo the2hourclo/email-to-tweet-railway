@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.12 - Complete Content Fix', // Version update
+    version: '10.13 - Claude JSON Structure Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -288,12 +288,12 @@ Guidelines:
 - Include relevant hashtags
 - Your entire response MUST be a single, valid JSON object starting with {"threads": [...]}. Do NOT include any explanations or commentary outside of the JSON block.
 
-Format your response as valid JSON:
+Format your response as valid JSON with tweets as simple strings:
 {
   "threads": [
     {
       "title": "Thread concept title",
-      "tweets": ["Tweet 1", "Tweet 2", "Tweet 3", "Tweet 4"]
+      "tweets": ["Tweet 1 text", "Tweet 2 text", "Tweet 3 text", "Tweet 4 text"]
     }
   ]
 }`;
@@ -317,7 +317,7 @@ Format your response as valid JSON:
   }
 }
 
-// Generate tweets using Claude - WITH COMPREHENSIVE DEBUGGING
+// Generate tweets using Claude - WITH COMPREHENSIVE DEBUGGING AND BETTER ERROR HANDLING
 async function generateTweets(emailContent, prompt) {
   try {
     const fullPrompt = `${prompt}
@@ -327,7 +327,17 @@ ${emailContent}
 
 NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 
-Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.`;
+Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.
+
+CRITICAL: Each tweet must be a simple string, not an object. Use this exact format:
+{
+  "threads": [
+    {
+      "title": "Thread concept title",
+      "tweets": ["Tweet 1 text", "Tweet 2 text", "Tweet 3 text"]
+    }
+  ]
+}`;
 
     console.log('\n📤 SENDING TO CLAUDE:');
     console.log('Prompt length:', fullPrompt.length);
@@ -344,16 +354,18 @@ Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be 
     console.log('\n📥 CLAUDE RESPONSE DEBUG:');
     console.log('Raw response length:', content.length);
     console.log('First 500 characters:', content.substring(0, 500));
-    console.log('Last 200 characters:', content.substring(content.length - 200));
     
-    // Robustly search for the JSON block in the response
+    // IMPROVED JSON EXTRACTION - handle malformed JSON
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       console.log('✅ JSON found in response');
-      console.log('JSON length:', jsonMatch[0].length);
       
+      let jsonString = jsonMatch[0];
+      
+      // ATTEMPT TO FIX COMMON JSON ISSUES
       try {
-        const parsed = JSON.parse(jsonMatch[0]);
+        // Try parsing as-is first
+        const parsed = JSON.parse(jsonString);
         
         console.log('\n🔍 PARSED JSON STRUCTURE:');
         console.log('Parsed type:', typeof parsed);
@@ -365,35 +377,128 @@ Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be 
         if (parsed.threads && parsed.threads.length > 0) {
           console.log('\n📋 FIRST THREAD ANALYSIS:');
           const firstThread = parsed.threads[0];
-          console.log('Thread type:', typeof firstThread);
-          console.log('Thread keys:', Object.keys(firstThread));
-          console.log('Title:', firstThread.title);
-          console.log('Tweets type:', typeof firstThread.tweets);
-          console.log('Tweets is array:', Array.isArray(firstThread.tweets));
-          console.log('Tweets length:', firstThread.tweets?.length);
+          console.log('Thread structure:', JSON.stringify(firstThread, null, 2));
           
-          if (Array.isArray(firstThread.tweets) && firstThread.tweets.length > 0) {
-            console.log('First tweet type:', typeof firstThread.tweets[0]);
-            console.log('First tweet preview:', firstThread.tweets[0].substring(0, 100));
-          }
+          // NORMALIZE THE THREAD STRUCTURE TO HANDLE CLAUDE'S VARIATIONS
+          const normalizedThreads = parsed.threads.map((thread, index) => {
+            console.log(`\n🔧 NORMALIZING THREAD ${index + 1}:`);
+            console.log('Original thread:', JSON.stringify(thread, null, 2));
+            
+            // Extract title from various possible properties
+            const title = thread.title || thread.concept || thread.name || thread.hook || `Generated Thread ${index + 1}`;
+            
+            // Extract tweets and normalize them
+            let tweets = [];
+            
+            if (Array.isArray(thread.tweets)) {
+              tweets = thread.tweets.map((tweet, tweetIndex) => {
+                console.log(`Tweet ${tweetIndex + 1} type:`, typeof tweet);
+                console.log(`Tweet ${tweetIndex + 1} value:`, tweet);
+                
+                // Handle different tweet formats
+                if (typeof tweet === 'string') {
+                  return tweet;
+                } else if (typeof tweet === 'object' && tweet !== null) {
+                  // Extract content from object tweets
+                  const tweetContent = tweet.content || tweet.text || tweet.message || tweet.tweet || JSON.stringify(tweet);
+                  console.log(`Extracted content: "${tweetContent}"`);
+                  return String(tweetContent);
+                } else {
+                  return String(tweet);
+                }
+              });
+            } else if (typeof thread.tweets === 'string') {
+              tweets = [thread.tweets];
+            } else {
+              // Fallback: create tweets from other thread properties
+              tweets = [
+                thread.hook || thread.title || 'Tweet 1',
+                thread.content || 'Tweet 2',
+                thread.cta || thread.callToAction || 'Tweet 3'
+              ].filter(Boolean);
+            }
+            
+            const normalizedThread = { title, tweets };
+            console.log(`Normalized thread ${index + 1}:`, JSON.stringify(normalizedThread, null, 2));
+            
+            return normalizedThread;
+          });
+          
+          console.log('\n✅ ALL THREADS NORMALIZED');
+          return { threads: normalizedThreads };
         }
         
         return parsed;
+        
       } catch (parseError) {
         console.error('❌ JSON Parse Error:', parseError);
-        console.error('Failed JSON:', jsonMatch[0].substring(0, 500));
-        throw new Error('Claude response contained invalid JSON');
+        console.error('Failed JSON (first 1000 chars):', jsonString.substring(0, 1000));
+        
+        // ATTEMPT MANUAL JSON REPAIR
+        console.log('🔧 Attempting JSON repair...');
+        
+        // Common fixes for malformed JSON
+        jsonString = jsonString
+          .replace(/,(\s*[}\]])/g, '$1')  // Remove trailing commas
+          .replace(/([{,]\s*)(\w+):/g, '$1"$2":')  // Quote unquoted keys
+          .replace(/:\s*'([^']*)'/g, ': "$1"')  // Replace single quotes with double
+          .replace(/\n/g, '\\n')  // Escape newlines in strings
+          .replace(/\t/g, '\\t');  // Escape tabs in strings
+        
+        try {
+          const repairedParsed = JSON.parse(jsonString);
+          console.log('✅ JSON repair successful');
+          return repairedParsed;
+        } catch (repairError) {
+          console.error('❌ JSON repair failed:', repairError);
+          
+          // ULTIMATE FALLBACK: Create a basic structure
+          console.log('🚨 Using fallback thread structure');
+          return {
+            threads: [{
+              title: 'Fallback Thread',
+              tweets: [
+                'Content generation encountered an error.',
+                'Please check the logs for details.',
+                'The original email content was processed but Claude returned invalid JSON.'
+              ]
+            }]
+          };
+        }
       }
     } else {
       console.error('❌ No JSON found in Claude response');
       console.error('Full response:', content);
-      throw new Error('Claude response did not contain valid JSON in the expected format.');
+      
+      // FALLBACK: Create basic structure from response text
+      return {
+        threads: [{
+          title: 'Text Response Thread',
+          tweets: [
+            'Claude returned text instead of JSON.',
+            content.substring(0, 200) + '...',
+            'Please check the prompt formatting.'
+          ]
+        }]
+      };
     }
   } catch (error) {
     if (error.status && error.status !== 404) {
       console.error(`Claude API Error: Status ${error.status}. Check API key and billing.`);
     }
-    throw new Error(`Claude generation failed: ${error.message}`);
+    console.error('Full error:', error);
+    
+    // FINAL FALLBACK
+    return {
+      threads: [{
+        title: 'Error Thread',
+        tweets: [
+          'An error occurred during content generation.',
+          `Error: ${error.message}`,
+          'Please check the system logs for details.'
+        ]
+      }]
+    };
   }
 }
 
@@ -428,18 +533,8 @@ async function createShortFormPages(tweetsData, emailPageId) {
           console.log(`Tweet ${tweetIndex + 1} type:`, typeof tweet);
           console.log(`Tweet ${tweetIndex + 1} content:`, tweet);
           
-          // Convert to string explicitly
-          if (typeof tweet === 'string') {
-            return tweet;
-          } else if (typeof tweet === 'object' && tweet !== null) {
-            // Extract text from object if it's structured
-            if (tweet.text) return String(tweet.text);
-            if (tweet.content) return String(tweet.content);
-            if (tweet.message) return String(tweet.message);
-            return JSON.stringify(tweet);
-          } else {
-            return String(tweet);
-          }
+          // Convert to string explicitly - should now already be strings from normalization
+          return String(tweet).trim();
         });
       } else {
         console.log(`⚠️ Thread ${i + 1} tweets is not an array:`, thread.tweets);
@@ -453,9 +548,9 @@ async function createShortFormPages(tweetsData, emailPageId) {
       
       // Add each tweet as a separate paragraph block
       threadTweets.forEach((tweet, j) => {
-        const tweetContent = String(tweet).trim(); // Ensure it's a string
+        const tweetContent = String(tweet).trim();
         
-        if (tweetContent) {
+        if (tweetContent && tweetContent !== 'undefined' && tweetContent !== 'null') {
           console.log(`Adding tweet ${j + 1}: "${tweetContent.substring(0, 50)}..."`);
           
           threadBlocks.push({
@@ -576,7 +671,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.12 - Complete Content Fix`);
+  console.log(`🔧 Version: 10.13 - Claude JSON Structure Fix`);
 });
 
 
