@@ -1,0 +1,33 @@
+{
+  "name": "email-to-tweet-railway",
+  "version": "1.0.0",
+  "description": "Convert Notion emails to Twitter threads using Claude AI - Railway deployment template",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "test": "node -c index.js && echo 'Syntax check passed ✅'"
+  },
+  "keywords": [
+    "notion",
+    "twitter",
+    "claude",
+    "automation",
+    "webhook",
+    "email",
+    "content",
+    "railway",
+    "ai"
+  ],
+  "author": "The Peak Performer - Email to Tweet Automation",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@notionhq/client": "^2.2.15",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
