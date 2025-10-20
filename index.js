@@ -391,7 +391,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
       const response = await notion.pages.create({
         parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
         properties: {
-          'Name': {
+          'Title': { // **FINAL FIX: Using 'Title' based on your confirmation**
             title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
           },
           'E-mails': { // Confirmed Relation property name
