@@ -10,8 +10,7 @@ app.use(express.json());
 
 // Initialize clients (will use environment variables)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
-// FIX APPLIED: Corrected typo from Anthantic to Anthropic
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }); // TYPO FIXED HERE
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }); 
 
 // --- Environment Validation ---
 
@@ -51,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.9.1 - Final Typo & Property Fix', // Version update
+    version: '10.9.4 - Final Content String Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -374,7 +373,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
   try {
     const results = [];
 
-    // FIX APPLIED: Check if threads exists AND is an array before iterating
+    // Check if threads exists AND is an array before iterating
     if (!Array.isArray(tweetsData.threads)) {
          throw new Error(`Expected 'threads' property from Claude to be an array, but received ${typeof tweetsData.threads}. Claude may have ignored the JSON format instruction.`);
     }
@@ -391,7 +390,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
       const response = await notion.pages.create({
         parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
         properties: {
-          'Title': { // **FINAL FIX: Using 'Title' based on your confirmation**
+          'Title': { // FINAL FIX: Using 'Title' based on your confirmation
             title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
           },
           'E-mails': { // Confirmed Relation property name
@@ -424,7 +423,8 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.9 - Final Typo Fix Applied`);
+  console.log(`🔧 Version: 10.9.2 - Final Code Fix Applied`);
 });
+
 
 
