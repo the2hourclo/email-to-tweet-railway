@@ -20,7 +20,8 @@ function validateEnvironment() {
     'NOTION_TOKEN',
     'ANTHROPIC_API_KEY',
     'EMAILS_DATABASE_ID',
-    'SHORTFORM_DATABASE_ID'
+    'SHORTFORM_DATABASE_ID',
+    'CLAUDE_MODEL_NAME' // NEW REQUIRED VARIABLE
   ];
 
   const missing = required.filter(key => !process.env[key]);
@@ -50,7 +51,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.6 - Final Model & Typo Fix', // Version update
+    version: '10.8 - Final Robustness Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -60,6 +61,7 @@ app.get('/', (req, res) => {
         anthropicKey: process.env.ANTHROPIC_API_KEY ? 'Set' : 'Missing',
         emailDbId: process.env.EMAILS_DATABASE_ID ? 'Set' : 'Missing',
         shortFormDbId: process.env.SHORTFORM_DATABASE_ID ? 'Set' : 'Missing',
+        modelName: process.env.CLAUDE_MODEL_NAME ? process.env.CLAUDE_MODEL_NAME : 'Missing', // NEW
         promptPage: process.env.PROMPT_PAGE_ID || 'Default Prompt',
     },
     timestamp: new Date().toISOString()
@@ -149,7 +151,7 @@ async function processEmailAutomation(pageId) {
     console.log(`📄 Target Page ID: ${pageId}`);
 
     // Step 1: Verify this page is in the E-mails database and retrieve properties
-    console.log('🔍 Step 1: Retrieving and verifying source page...');
+    console.log('🔍 Step 1: Retrieving and verifying source page... (This step confirms your ENV variables are correct)');
     
     let pageInfo;
     try {
@@ -342,7 +344,7 @@ NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514', // <<-- Changed to the specific timestamped model
+      model: process.env.CLAUDE_MODEL_NAME, // READING FROM NEW ENV VAR
       max_tokens: 4000,
       messages: [{ role: 'user', content: fullPrompt }]
     });
@@ -372,16 +374,25 @@ async function createShortFormPages(tweetsData, emailPageId) {
   try {
     const results = [];
 
+    // FIX APPLIED: Check if threads exists AND is an array before iterating
+    if (!Array.isArray(tweetsData.threads)) {
+         throw new Error(`Expected 'threads' property from Claude to be an array, but received ${typeof tweetsData.threads}. Claude may have ignored the JSON format instruction.`);
+    }
+
     for (let i = 0; i < tweetsData.threads.length; i++) {
       const thread = tweetsData.threads[i];
+      
+      // Secondary robustness check: ensure tweets array exists
+      const threadTweets = Array.isArray(thread.tweets) ? thread.tweets : [];
+
       // Join tweets with triple dash separator for visual clarity in Notion
-      const content = thread.tweets.join('\n\n---\n\n'); 
+      const content = threadTweets.join('\n\n---\n\n'); 
       
       const response = await notion.pages.create({
         parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
         properties: {
           'Name': {
-            title: [{ text: { content: thread.title } }]
+            title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
           },
           'E-mails': { // Confirmed Relation property name
             relation: [{ id: emailPageId }]
@@ -413,5 +424,6 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.6 - Final Model & Typo Fix`);
+  console.log(`🔧 Version: 10.8 - Final Robustness Fix`);
 });
+
