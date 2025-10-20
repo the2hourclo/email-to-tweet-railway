@@ -51,7 +51,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.10 - Extreme Robustness Applied', // Version update
+    version: '10.11 - Multi-Block Content Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -377,79 +377,53 @@ async function createShortFormPages(tweetsData, emailPageId) {
          throw new Error(`Expected 'threads' property from Claude to be an array, but received ${typeof tweetsData.threads}. Claude may have ignored the JSON format instruction.`);
     }
 
-    // FIX 1: Add Content Length Check and Truncation
-    const MAX_CHAR_LIMIT = 1900;
-    
+    const blocks = [];
+
     for (let i = 0; i < tweetsData.threads.length; i++) {
       const thread = tweetsData.threads[i];
       
       // Secondary robustness check: ensure tweets array exists and extract content
       const threadTweets = Array.isArray(thread.tweets) ? thread.tweets : [];
 
-      // Join tweets with triple dash separator for visual clarity in Notion
-      let content = threadTweets.join('\n\n---\n\n');
-      
-      // Notion rich text has a ~2000 character limit - truncate if needed
-      if (content.length > MAX_CHAR_LIMIT) {
-        content = content.substring(0, MAX_CHAR_LIMIT) + '...\n\n[Content truncated - see full thread in source]';
-      }
-
-      // Ensure content is not empty
-      if (!content.trim()) {
-        content = `Generated Thread ${i + 1} - Content processing error. Please check Claude logs.`;
-      }
-      
-      console.log(`📝 Creating page ${i + 1} with content length: ${content.length}`);
-
-      try {
-        const response = await notion.pages.create({
-          parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
-          properties: {
-            'Title': { // FINAL FIX: Using 'Title' based on your confirmation
-              title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
-            },
-            'E-mails': { // Confirmed Relation property name
-              relation: [{ id: emailPageId }]
-            }
-          },
-          // FIX 2: Correct structure for writing content block as a string
-          children: [{
-            object: 'block',
-            type: 'paragraph',
-            paragraph: {
-              rich_text: [{ type: 'text', text: { content: content } }] // Correct structure
-            }
-          }]
-        });
-
-        console.log(`✅ Successfully created page: ${response.id}`);
-        results.push({ id: response.id, title: thread.title });
+      // Create a block for every single tweet and separate with a divider
+      for(let j = 0; j < threadTweets.length; j++) {
+        const tweetContent = String(threadTweets[j]); // Ensure content is always a string
         
-      } catch (pageError) {
-        console.error(`❌ Failed to create page ${i + 1}:`, pageError);
-        
-        // Try creating with minimal content as fallback
-        const fallbackResponse = await notion.pages.create({
-          parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
-          properties: {
-            'Title': {
-              title: [{ text: { content: `Thread ${i + 1} - CRASHED` } }]
-            },
-            'E-mails': {
-              relation: [{ id: emailPageId }]
-            }
-          },
-          children: [{
-            object: 'block',
-            type: 'paragraph',
-            paragraph: {
-              rich_text: [{ type: 'text', text: { content: 'Content creation failed. Check logs for details.' } }]
-            }
-          }]
+        blocks.push({
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [{ type: 'text', text: { content: tweetContent } }] // Correct structure
+          }
         });
-          
-        results.push({ id: fallbackResponse.id, title: 'Error - Check Logs' });
+        
+        // Add a divider block between tweets, but not after the last tweet of the thread
+        if (j < threadTweets.length - 1) {
+            blocks.push({
+                object: 'block',
+                type: 'divider',
+                divider: {}
+            });
+        }
       }
+
+      // Add a header/callout block for the thread title and page properties
+      const response = await notion.pages.create({
+        parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
+        properties: {
+          'Title': { // FINAL FIX: Using 'Title' based on your confirmation
+            title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
+          },
+          'E-mails': { // Confirmed Relation property name
+            relation: [{ id: emailPageId }]
+          }
+        },
+        // Write content blocks using the Append Block Children endpoint after creation
+        children: blocks // Pass all collected blocks for this page
+      });
+
+      console.log(`✅ Successfully created page: ${response.id}`);
+      results.push({ id: response.id, title: thread.title });
     }
 
     return results;
@@ -469,4 +443,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
   console.log(`🔧 Version: 10.10 - Extreme Robustness Applied`);
 });
+
 
