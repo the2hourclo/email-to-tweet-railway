@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '11.0 - 2HourMan Tweet Prompt Integration', // Version update
+    version: '11.1 - Robust Parsing & Notion Prompt', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -198,19 +198,19 @@ async function processEmailAutomation(pageId) {
     const emailContent = await getEmailContent(pageId);
     console.log(`✅ Extracted ${emailContent.length} characters of content`);
 
-    // Step 4: Get processing prompt from Notion
+    // Step 4: Get processing prompt from Notion (your preference!)
     console.log('📝 Step 4: Getting 2HourMan tweet prompt from Notion...');
     const prompt = await getPromptFromNotion();
-    console.log('✅ 2HourMan tweet prompt retrieved');
+    console.log('✅ 2HourMan tweet prompt retrieved from Notion');
 
-    // Step 5: Generate tweets using Claude with your prompt
+    // Step 5: Generate tweets using Claude with simplified, more robust approach
     console.log('🤖 Step 5: Generating tweets with 2HourMan methodology...');
-    const tweetsData = await generateTweetsWithPrompt(emailContent, prompt);
-    console.log(`✅ Generated structured tweet analysis`);
+    const tweetsData = await generateTweetsSimplified(emailContent, prompt);
+    console.log(`✅ Generated ${tweetsData.tweets.length} tweets`);
 
-    // Step 6: Create pages in Short Form database with proper formatting
-    console.log('📝 Step 6: Creating Short Form pages with 2HourMan structure...');
-    const createdPages = await createShortFormPages(tweetsData, pageId);
+    // Step 6: Create pages in Short Form database with simple, reliable formatting
+    console.log('📝 Step 6: Creating Short Form pages...');
+    const createdPages = await createShortFormPagesSimplified(tweetsData, pageId);
     console.log(`✅ Created ${createdPages.length} pages in Short Form database`); 
 
     console.log('🎉 === AUTOMATION COMPLETED ===');
@@ -218,7 +218,7 @@ async function processEmailAutomation(pageId) {
       status: 'success',
       email_page_id: pageId,
       content_length: emailContent.length,
-      tweets_generated: tweetsData.tweets?.length || 0,
+      tweets_generated: tweetsData.tweets.length,
       pages_created: createdPages.length,
       timestamp: new Date().toISOString()
     };
@@ -268,14 +268,14 @@ async function getEmailContent(pageId) {
   }
 }
 
-// FIXED: Get prompt from Notion page - properly extract all content
+// ROBUST: Get prompt from Notion page with better error handling
 async function getPromptFromNotion() {
   try {
-    console.log(`🔍 Reading prompt from Notion page ID: ${process.env.PROMPT_PAGE_ID}`);
+    console.log(`🔍 Reading 2HourMan prompt from Notion page ID: ${process.env.PROMPT_PAGE_ID}`);
     
     if (!process.env.PROMPT_PAGE_ID) {
-      console.log('⚠️ No PROMPT_PAGE_ID set, using fallback prompt');
-      return getDefaultPrompt();
+      console.log('⚠️ No PROMPT_PAGE_ID set, using simplified fallback prompt');
+      return getSimplifiedPrompt();
     }
 
     const response = await notion.blocks.children.list({
@@ -313,76 +313,50 @@ async function getPromptFromNotion() {
     const finalPrompt = prompt.trim();
     
     if (!finalPrompt) {
-      console.log('⚠️ Prompt page appears to be empty, using fallback');
-      return getDefaultPrompt();
+      console.log('⚠️ Prompt page appears to be empty, using simplified fallback');
+      return getSimplifiedPrompt();
     }
 
-    console.log(`✅ Successfully extracted ${finalPrompt.length} characters from prompt page`);
+    console.log(`✅ Successfully extracted ${finalPrompt.length} characters from Notion prompt page`);
     console.log(`📝 Prompt preview: ${finalPrompt.substring(0, 200)}...`);
     
     return finalPrompt;
 
   } catch (error) {
     console.error('❌ Error fetching prompt from Notion:', error);
-    console.log('🔄 Falling back to default prompt');
-    return getDefaultPrompt();
+    console.log('🔄 Falling back to simplified prompt');
+    return getSimplifiedPrompt();
   }
 }
 
-// Fallback prompt (simplified version of your methodology)
-function getDefaultPrompt() {
-  return `You are a content extraction specialist for the 2 Hour Man brand. Transform content into high-quality tweets following this methodology:
+// Simplified fallback prompt
+function getSimplifiedPrompt() {
+  return `You are a content extraction specialist for the 2 Hour Man brand. Transform content into high-quality tweets.
 
-PHASE 1: Content Analysis
-- Identify core message/theme
-- Extract key insights and arguments
-- Find specific examples/evidence
-- Note frameworks/processes
-- Capture metrics/numbers
-- Identify unique perspectives
+For each tweet, ensure:
 
-PHASE 2: Tweet Development
-For EACH tweet, ensure:
+1. SINGLE AHA MOMENT: One clear insight that everything builds toward
+2. WHAT-WHY-WHERE CYCLES:
+   - WHAT: Define the concept clearly (no jargon without explanation)
+   - WHY: Show why it matters (mechanism, not just naming)
+   - WHERE: Give clear direction on what to do
 
-SINGLE AHA MOMENT: One clear insight/realization that everything builds toward
+3. CORE PRINCIPLES:
+   - Explain mechanisms, don't just name them
+   - Use actual concepts from source content
+   - No formulaic markers ("Result:", "Key takeaway:", etc.)
+   - Natural, conversational flow
 
-WHAT-WHY-WHERE CYCLES (MANDATORY):
-- WHAT: Define/explain the concept clearly (no jargon without plain language)
-- WHY: Connect to audience pain/goals, show mechanism/psychology 
-- WHERE: Give clear direction on what to focus on or do
+Create 3-5 tweets. For each, provide:
+- Main tweet content
+- Brief explanation of the aha moment
+- Character count
 
-CORE PRINCIPLES:
-- No jargon without explaining in plain language
-- Explain mechanisms, don't just name them
-- Use actual concepts from source content
-- Nothing should require visuals to understand
-- No formulaic markers ("Result:", "Key takeaway:", etc.)
-
-Create 3-5 tweets following this structure. For each tweet, provide:
-
-TWEET #X: [Brief Description]
-
-Main Content:
-[Full tweet text]
-
-Single Aha Moment:
-[State the ONE core insight]
-
-What-Why-Where Check:
-✅ WHAT: [How concept is defined]
-✅ WHY: [Mechanism/importance shown]  
-✅ WHERE: [Action/direction given]
-
-Character Count: [X]/500 ✅
-
-CTA Tweet:
-[Unique CTA specific to this content ending with link]
-
-Character Count: [X]/500 ✅`;
+Keep tweets under 500 characters each.`;
 }
 
-// Generate tweets using Claude with your 2HourMan prompt
-async function generateTweetsWithPrompt(emailContent, prompt) {
+// SIMPLIFIED: Generate tweets with more robust parsing
+async function generateTweetsSimplified(emailContent, prompt) {
   try {
     const fullPrompt = `${prompt}
 
@@ -391,229 +365,187 @@ ${emailContent}
 
 NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 
-Please analyze this content and create 3-5 tweets following the 2HourMan methodology outlined above. Ensure each tweet has a single aha moment, complete What-Why-Where cycles, and follows all core principles.
+Please create 3-5 tweets following the 2HourMan methodology. 
 
-Format your response with the exact structure specified in the prompt above.`;
+Format each tweet like this:
 
-    console.log('\n📤 SENDING TO CLAUDE WITH 2HOURMAN PROMPT:');
+TWEET 1:
+[Main tweet content here]
+
+AHA MOMENT: [Brief description of the insight]
+
+---
+
+TWEET 2:
+[Main tweet content here]
+
+AHA MOMENT: [Brief description of the insight]
+
+---
+
+Continue for all tweets. Keep each tweet under 500 characters.`;
+
+    console.log('\n📤 SENDING SIMPLIFIED REQUEST TO CLAUDE:');
     console.log('Full prompt length:', fullPrompt.length);
-    console.log('Using model:', process.env.CLAUDE_MODEL_NAME);
 
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME,
-      max_tokens: 8000, // Increased for detailed analysis
+      max_tokens: 6000,
       messages: [{ role: 'user', content: fullPrompt }]
     });
 
     const content = response.content[0].text;
     
-    console.log('\n📥 CLAUDE RESPONSE WITH 2HOURMAN ANALYSIS:');
+    console.log('\n📥 CLAUDE RESPONSE:');
     console.log('Response length:', content.length);
-    console.log('First 500 characters:', content.substring(0, 500));
+    console.log('First 800 characters:', content.substring(0, 800));
     
-    // Parse the structured response
-    const tweets = parseStructuredTweetResponse(content);
+    // ROBUST PARSING: Handle various response formats
+    const tweets = parseSimplifiedResponse(content);
     
-    console.log(`✅ Parsed ${tweets.length} structured tweets`);
+    console.log(`✅ Successfully parsed ${tweets.length} tweets`);
     
     return { tweets };
 
   } catch (error) {
-    console.error('❌ Error generating tweets with 2HourMan prompt:', error);
+    console.error('❌ Error generating tweets:', error);
     
     // Fallback response
     return {
       tweets: [{
-        title: 'Error in Tweet Generation',
-        content: `An error occurred while generating tweets using the 2HourMan methodology.\n\nError: ${error.message}\n\nPlease check the system logs for details.`,
-        aha_moment: 'Error occurred',
-        what_why_where: 'Error in processing',
-        character_count: 'N/A',
-        cta: 'Please check the system logs for details.'
+        number: 1,
+        content: `Error generating tweets: ${error.message}\n\nPlease check the system logs for details.`,
+        aha_moment: 'Error occurred during tweet generation',
+        character_count: 0
       }]
     };
   }
 }
 
-// Parse Claude's structured response into usable tweet objects
-function parseStructuredTweetResponse(content) {
+// ROBUST: Parse Claude's response with multiple fallback strategies
+function parseSimplifiedResponse(content) {
   const tweets = [];
   
   try {
-    // Split content by tweet sections
-    const tweetSections = content.split(/TWEET #\d+:/);
+    console.log('\n🔍 PARSING CLAUDE RESPONSE:');
     
-    // Remove empty first element
-    if (tweetSections[0].trim() === '') {
-      tweetSections.shift();
-    }
+    // Strategy 1: Look for "TWEET X:" pattern
+    const tweetMatches = content.match(/TWEET\s+\d+:\s*([\s\S]*?)(?=TWEET\s+\d+:|$)/gi);
     
-    tweetSections.forEach((section, index) => {
-      try {
-        const tweetNum = index + 1;
+    if (tweetMatches && tweetMatches.length > 0) {
+      console.log(`✅ Found ${tweetMatches.length} tweets using TWEET pattern`);
+      
+      tweetMatches.forEach((match, index) => {
+        try {
+          // Extract content and aha moment
+          const contentMatch = match.match(/TWEET\s+\d+:\s*([\s\S]*?)(?=AHA MOMENT:|---|\n\n|$)/i);
+          const ahaMatch = match.match(/AHA MOMENT:\s*([\s\S]*?)(?=---|$)/i);
+          
+          const tweetContent = contentMatch ? contentMatch[1].trim() : `Tweet ${index + 1} content extraction failed`;
+          const ahaContent = ahaMatch ? ahaMatch[1].trim() : 'Aha moment not identified';
+          
+          tweets.push({
+            number: index + 1,
+            content: tweetContent,
+            aha_moment: ahaContent,
+            character_count: tweetContent.length
+          });
+          
+          console.log(`✅ Parsed Tweet ${index + 1}: ${tweetContent.substring(0, 50)}...`);
+          
+        } catch (parseError) {
+          console.error(`❌ Error parsing tweet ${index + 1}:`, parseError);
+          
+          tweets.push({
+            number: index + 1,
+            content: `Tweet ${index + 1}: Parse error occurred`,
+            aha_moment: 'Could not parse aha moment',
+            character_count: 0
+          });
+        }
+      });
+    } else {
+      console.log('⚠️ No TWEET pattern found, trying alternative parsing...');
+      
+      // Strategy 2: Split by line breaks and look for substantial content
+      const lines = content.split('\n').filter(line => line.trim().length > 20);
+      
+      if (lines.length > 0) {
+        console.log(`📄 Found ${lines.length} substantial lines, creating tweets from top content`);
         
-        // Extract different components using regex patterns
-        const titleMatch = section.match(/^([^\n]+)/);
-        const contentMatch = section.match(/Main Content:\s*([\s\S]*?)(?=\n\nSingle Aha Moment:|$)/);
-        const ahaMatch = section.match(/Single Aha Moment:\s*([\s\S]*?)(?=\n\nWhat-Why-Where|$)/);
-        const whatWhyWhereMatch = section.match(/What-Why-Where Check:\s*([\s\S]*?)(?=\n\nCharacter Count:|$)/);
-        const ctaMatch = section.match(/CTA Tweet:\s*([\s\S]*?)(?=\n\nCharacter Count:|$)/);
+        // Take the first few substantial paragraphs as tweets
+        const maxTweets = Math.min(3, lines.length);
         
-        const tweet = {
-          number: tweetNum,
-          title: titleMatch ? titleMatch[1].trim() : `Tweet ${tweetNum}`,
-          content: contentMatch ? contentMatch[1].trim() : 'Content extraction failed',
-          aha_moment: ahaMatch ? ahaMatch[1].trim() : 'Aha moment not identified',
-          what_why_where: whatWhyWhereMatch ? whatWhyWhereMatch[1].trim() : 'Cycle analysis missing',
-          cta: ctaMatch ? ctaMatch[1].trim() : 'CTA not found',
-          character_count: contentMatch ? contentMatch[1].trim().length : 0
-        };
+        for (let i = 0; i < maxTweets; i++) {
+          const line = lines[i].trim();
+          
+          tweets.push({
+            number: i + 1,
+            content: line,
+            aha_moment: `Insight ${i + 1} from content analysis`,
+            character_count: line.length
+          });
+          
+          console.log(`✅ Created Tweet ${i + 1} from line: ${line.substring(0, 50)}...`);
+        }
+      } else {
+        console.log('❌ No parseable content found, creating fallback tweet');
         
-        tweets.push(tweet);
+        // Strategy 3: Use raw content as single tweet
+        const fallbackContent = content.substring(0, 400).trim();
         
-        console.log(`✅ Parsed Tweet ${tweetNum}: "${tweet.title}"`);
-        
-      } catch (parseError) {
-        console.error(`❌ Error parsing tweet section ${index + 1}:`, parseError);
-        
-        // Add error tweet
         tweets.push({
-          number: index + 1,
-          title: `Tweet ${index + 1} - Parse Error`,
-          content: 'Failed to parse this tweet section from Claude response.',
-          aha_moment: 'Parse error occurred',
-          what_why_where: 'Unable to extract cycle analysis',
-          cta: 'Check logs for details',
-          character_count: 0
+          number: 1,
+          content: fallbackContent || 'Failed to extract meaningful content from response',
+          aha_moment: 'Unable to identify specific aha moment',
+          character_count: fallbackContent.length
         });
       }
-    });
+    }
     
   } catch (error) {
-    console.error('❌ Error parsing structured response:', error);
+    console.error('❌ Complete parsing failure:', error);
     
-    // Return the raw content as a single tweet if parsing fails
+    // Final fallback
     tweets.push({
       number: 1,
-      title: 'Raw Claude Response',
-      content: content,
-      aha_moment: 'Unable to parse structured response',
-      what_why_where: 'Structure parsing failed',
-      cta: 'Review raw response above',
-      character_count: content.length
+      content: 'Tweet parsing failed completely. Check logs for details.',
+      aha_moment: 'Parse error occurred',
+      character_count: 0
     });
   }
   
+  console.log(`📊 Final parsing result: ${tweets.length} tweets created`);
   return tweets;
 }
 
-// Create pages in Short Form database with proper 2HourMan structure
-async function createShortFormPages(tweetsData, emailPageId) {
+// SIMPLIFIED: Create pages with reliable, simple formatting
+async function createShortFormPagesSimplified(tweetsData, emailPageId) {
   try {
     const results = [];
 
-    console.log('\n📝 CREATING PAGES WITH 2HOURMAN STRUCTURE:');
-    console.log(`Processing ${tweetsData.tweets.length} structured tweets...`);
+    console.log('\n📝 CREATING SIMPLIFIED PAGES:');
+    console.log(`Processing ${tweetsData.tweets.length} tweets...`);
 
     for (let i = 0; i < tweetsData.tweets.length; i++) {
       const tweet = tweetsData.tweets[i];
       
       console.log(`\n🧵 CREATING PAGE FOR TWEET ${i + 1}:`);
-      console.log(`Title: ${tweet.title}`);
-      console.log(`Content length: ${tweet.content.length} characters`);
+      console.log(`Content: ${tweet.content.substring(0, 100)}...`);
+      console.log(`Character count: ${tweet.character_count}`);
 
-      // Create structured blocks for each tweet
+      // Create simple, reliable blocks
       const blocks = [];
       
-      // Title block
-      blocks.push({
-        object: 'block',
-        type: 'heading_2',
-        heading_2: {
-          rich_text: [{
-            type: 'text',
-            text: { content: `TWEET #${tweet.number}: ${tweet.title}` }
-          }]
-        }
-      });
-      
-      // Main Content section
-      blocks.push({
-        object: 'block',
-        type: 'heading_3',
-        heading_3: {
-          rich_text: [{
-            type: 'text',
-            text: { content: 'Main Content:' }
-          }]
-        }
-      });
-      
+      // Main tweet content
       blocks.push({
         object: 'block',
         type: 'paragraph',
         paragraph: {
           rich_text: [{
             type: 'text',
-            text: { content: tweet.content }
-          }]
-        }
-      });
-      
-      // Single Aha Moment section
-      blocks.push({
-        object: 'block',
-        type: 'heading_3',
-        heading_3: {
-          rich_text: [{
-            type: 'text',
-            text: { content: 'Single Aha Moment:' }
-          }]
-        }
-      });
-      
-      blocks.push({
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [{
-            type: 'text',
-            text: { content: tweet.aha_moment }
-          }]
-        }
-      });
-      
-      // What-Why-Where Check section
-      blocks.push({
-        object: 'block',
-        type: 'heading_3',
-        heading_3: {
-          rich_text: [{
-            type: 'text',
-            text: { content: 'What-Why-Where Check:' }
-          }]
-        }
-      });
-      
-      blocks.push({
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [{
-            type: 'text',
-            text: { content: tweet.what_why_where }
-          }]
-        }
-      });
-      
-      // Character Count
-      blocks.push({
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [{
-            type: 'text',
-            text: { content: `Character Count: ${tweet.character_count}/500 ${tweet.character_count <= 500 ? '✅' : '❌'}` }
+            text: { content: tweet.content },
+            annotations: { bold: true }
           }]
         }
       });
@@ -625,36 +557,44 @@ async function createShortFormPages(tweetsData, emailPageId) {
         divider: {}
       });
       
-      // CTA Tweet section
+      // Aha moment
       blocks.push({
         object: 'block',
-        type: 'heading_3',
-        heading_3: {
-          rich_text: [{
-            type: 'text',
-            text: { content: 'CTA Tweet:' }
-          }]
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text',
+              text: { content: 'Aha Moment: ' },
+              annotations: { bold: true }
+            },
+            {
+              type: 'text',
+              text: { content: tweet.aha_moment }
+            }
+          ]
         }
       });
       
+      // Character count
       blocks.push({
         object: 'block',
         type: 'paragraph',
         paragraph: {
           rich_text: [{
             type: 'text',
-            text: { content: tweet.cta }
+            text: { content: `Character Count: ${tweet.character_count}/500 ${tweet.character_count <= 500 ? '✅' : '❌'}` }
           }]
         }
       });
 
       try {
-        // Create the page with structured blocks
+        // Create the page
         const response = await notion.pages.create({
           parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
           properties: {
             'Title': {
-              title: [{ text: { content: `TWEET #${tweet.number}: ${tweet.title}` } }]
+              title: [{ text: { content: `Tweet ${tweet.number}: ${tweet.aha_moment.substring(0, 50)}...` } }]
             },
             'E-mails': {
               relation: [{ id: emailPageId }]
@@ -663,27 +603,24 @@ async function createShortFormPages(tweetsData, emailPageId) {
           children: blocks
         });
 
-        console.log(`✅ Successfully created structured page ${i + 1}: ${response.id}`);
-        console.log(`   Title: TWEET #${tweet.number}: ${tweet.title}`);
-        console.log(`   Blocks added: ${blocks.length}`);
+        console.log(`✅ Successfully created page ${i + 1}: ${response.id}`);
         
         results.push({ 
           id: response.id, 
-          title: `TWEET #${tweet.number}: ${tweet.title}`,
-          blocks_count: blocks.length,
-          tweet_number: tweet.number
+          title: `Tweet ${tweet.number}`,
+          character_count: tweet.character_count
         });
 
       } catch (pageError) {
         console.error(`❌ Failed to create page ${i + 1}:`, pageError);
         
-        // Create minimal fallback page
+        // Simple fallback page
         try {
           const fallbackResponse = await notion.pages.create({
             parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
             properties: {
               'Title': {
-                title: [{ text: { content: `Tweet ${i + 1} - Creation Error` } }]
+                title: [{ text: { content: `Tweet ${i + 1} - Error` } }]
               },
               'E-mails': {
                 relation: [{ id: emailPageId }]
@@ -695,7 +632,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
               paragraph: {
                 rich_text: [{
                   type: 'text',
-                  text: { content: `Error creating structured page for tweet ${i + 1}. Check logs for details.\n\nOriginal content:\n${tweet.content}` }
+                  text: { content: `Error creating page. Original content: ${tweet.content}` }
                 }]
               }
             }]
@@ -707,16 +644,16 @@ async function createShortFormPages(tweetsData, emailPageId) {
             error: true
           });
         } catch (fallbackError) {
-          console.error(`❌ Even fallback creation failed for tweet ${i + 1}:`, fallbackError);
+          console.error(`❌ Even fallback failed for tweet ${i + 1}:`, fallbackError);
         }
       }
     }
 
-    console.log(`\n✅ COMPLETED: Created ${results.length} structured pages total`);
+    console.log(`\n✅ COMPLETED: Created ${results.length} pages`);
     return results;
 
   } catch (error) {
-    console.error('❌ Error in createShortFormPages:', error);
+    console.error('❌ Error in createShortFormPagesSimplified:', error);
     throw new Error(`Failed to create pages in Notion: ${error.message}`);
   }
 }
@@ -729,6 +666,6 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 11.0 - 2HourMan Tweet Prompt Integration`);
-  console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Default fallback'}`);
+  console.log(`🔧 Version: 11.1 - Robust Parsing & Notion Prompt`);
+  console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
 });
