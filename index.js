@@ -49,7 +49,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '9.0 - Webhook Fix Confirmed',
+    version: '9.2 - Updated to Claude Sonnet 4',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -323,7 +323,7 @@ NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4', // <<-- UPDATED TO CLAUDE SONNET 4
       max_tokens: 4000,
       messages: [{ role: 'user', content: fullPrompt }]
     });
@@ -340,6 +340,10 @@ Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be 
       throw new Error('Claude response did not contain valid JSON in the expected format.');
     }
   } catch (error) {
+    // Check if the error is a rate limit or another transient issue before throwing
+    if (error.status && error.status !== 404) {
+      console.error(`Claude API Error: Status ${error.status}. Check API key and billing.`);
+    }
     throw new Error(`Claude generation failed: ${error.message}`);
   }
 }
@@ -390,7 +394,5 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 9.0 - Webhook Fix Confirmed`);
+  console.log(`🔧 Version: 9.2 - Updated to Claude Sonnet 4`);
 });
-
-
