@@ -51,7 +51,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.9.3 - Final Property Name Fix', // Version update
+    version: '10.9.4 - Final Content String Fix', // Final working version
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -61,7 +61,7 @@ app.get('/', (req, res) => {
         anthropicKey: process.env.ANTHROPIC_API_KEY ? 'Set' : 'Missing',
         emailDbId: process.env.EMAILS_DATABASE_ID ? 'Set' : 'Missing',
         shortFormDbId: process.env.SHORTFORM_DATABASE_ID ? 'Set' : 'Missing',
-        modelName: process.env.CLAUDE_MODEL_NAME ? process.env.CLAUDE_MODEL_NAME : 'Missing', // NEW
+        modelName: process.env.CLAUDE_MODEL_NAME ? process.env.CLAUDE_MODEL_NAME : 'Missing',
         promptPage: process.env.PROMPT_PAGE_ID || 'Default Prompt',
     },
     timestamp: new Date().toISOString()
@@ -73,18 +73,16 @@ app.post('/webhook', async (req, res) => {
   try {
     console.log('\n🔥 === NOTION BUTTON WEBHOOK RECEIVED ===');
     console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
-    // Log keys for verification
     console.log('🔍 Top-level Body Keys:', Object.keys(req.body)); 
 
     let pageId = null;
 
     // 🏆 PRIMARY CHECK: The confirmed location for Page ID in Database Button Webhooks
     if (req.body.data && req.body.data.id) {
-        // Notion database page IDs are nested under data.id
         pageId = req.body.data.id;
         console.log(`✅ Page ID found in req.body.data.id: ${pageId}`);
     } 
-    // FALLBACKS (Kept for maximum compatibility, though we identified the primary location)
+    // FALLBACKS (Retained for robustness)
     else if (req.body.page_id) {
       pageId = req.body.page_id;
       console.log(`📄 Page ID from page_id field (Fallback 1): ${pageId}`);
@@ -165,7 +163,7 @@ async function processEmailAutomation(pageId) {
     }
     
     // The replace(/-/g, '') is necessary for comparison flexibility
-    const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '').toLowerCase(); // Added toLowerCase()
+    const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '').toLowerCase(); 
     
     // DEBUGGING LOG: Prints the IDs being compared
     console.log(`\nDEBUG: Comparing DB IDs:`);
@@ -223,7 +221,7 @@ async function processEmailAutomation(pageId) {
     // Step 6: Create pages in Short Form database
     console.log('📝 Step 6: Creating Short Form pages...');
     const createdPages = await createShortFormPages(tweetsData, pageId);
-    console.log('✅ Created 5 pages in Short Form database'); // Simplified log for clarity
+    console.log(`✅ Created ${createdPages.length} pages in Short Form database`); 
 
     console.log('🎉 === AUTOMATION COMPLETED ===');
     return {
@@ -374,7 +372,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
   try {
     const results = [];
 
-    // Check if threads exists AND is an array before iterating
+    // FIX APPLIED: Check if threads exists AND is an array before iterating
     if (!Array.isArray(tweetsData.threads)) {
          throw new Error(`Expected 'threads' property from Claude to be an array, but received ${typeof tweetsData.threads}. Claude may have ignored the JSON format instruction.`);
     }
@@ -383,7 +381,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
       const thread = tweetsData.threads[i];
       
       // Secondary robustness check: ensure tweets array exists
-      // **FIXED CONTENT STRING ISSUE**: Now uses Array.isArray check provided earlier.
+      // FIX APPLIED: Ensure thread.tweets is an array before using .join()
       const threadTweets = Array.isArray(thread.tweets) ? thread.tweets : [];
 
       // Join tweets with triple dash separator for visual clarity in Notion
@@ -425,9 +423,5 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.9.3 - Final Property Name Fix`);
+  console.log(`🔧 Version: 10.9.4 - Final Content String Fix`);
 });
-
-
-
-
