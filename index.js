@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.4 - Final Typo Fix Applied', // Version update
+    version: '10.5 - Final Typo Fix Applied', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -415,6 +415,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
   console.log(`🔧 Version: 10.4 - Final Typo Fix Applied`);
 });
+
 
 
 
