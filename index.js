@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const { Client } = require('@notionhq/client');
@@ -51,7 +50,13 @@ app.post('/webhook', async (req, res) => {
       console.log('✅ Found page_id in body.page_id:', page_id);
     }
     
-    // Method 2: Notion's standard format - body.id (most likely)
+    // Method 2: Notion's nested format - body.data.id (ACTUAL FORMAT!)
+    else if (req.body.data && req.body.data.id) {
+      page_id = req.body.data.id;
+      console.log('✅ Found page_id in body.data.id:', page_id);
+    }
+    
+    // Method 3: Notion's standard format - body.id (fallback)
     else if (req.body.id) {
       page_id = req.body.id;
       console.log('✅ Found page_id in body.id:', page_id);
