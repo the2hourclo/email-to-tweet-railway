@@ -10,7 +10,7 @@ app.use(express.json());
 
 // Initialize clients (will use environment variables)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthantic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // --- Environment Validation ---
 
@@ -49,7 +49,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.2 - Debugging ID Mismatch', // Version update
+    version: '10.3 - Final ID Consistency Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -156,24 +156,24 @@ async function processEmailAutomation(pageId) {
     } catch (e) {
         if (e.code === 'object_not_found') {
              // We now specifically catch the error you were seeing and give a clearer message
-             throw new Error(`Notion Access Error: Could not find page ID ${pageId}. This usually means the page or its PARENT DATABASE is not shared with your integration. Please check the 'Share' settings on the database.`);
+             throw new Error(`Notion Access Error: Could not find page ID ${pageId}. This usually means the page or its PARENT DATABASE is not shared with your integration.`);
         }
         throw e; // re-throw other Notion errors
     }
     
     // The replace(/-/g, '') is necessary for comparison flexibility
-    const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '');
+    const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '').toLowerCase(); // Added toLowerCase()
     
     // DEBUGGING LOG: Prints the IDs being compared
     console.log(`\nDEBUG: Comparing DB IDs:`);
     console.log(`DEBUG: Expected (ENV): ${expectedDbId}`);
-    console.log(`DEBUG: Received (Page Parent): ${pageInfo.parent.database_id.replace(/-/g, '')}`);
-    console.log(`DEBUG: The two IDs must match exactly (ignoring hyphens).\n`);
+    console.log(`DEBUG: Received (Page Parent): ${pageInfo.parent.database_id.replace(/-/g, '').toLowerCase()}`); // Added toLowerCase()
+    console.log(`DEBUG: The two IDs must match exactly (ignoring hyphens and case).\n`);
     
-    // Check if page is in the correct database
+    // Check if page is in the correct database (case-insensitive check)
     if (!pageInfo.parent || 
         pageInfo.parent.type !== 'database_id' || 
-        pageInfo.parent.database_id.replace(/-/g, '') !== expectedDbId) {
+        pageInfo.parent.database_id.replace(/-/g, '').toLowerCase() !== expectedDbId) {
       console.log('ℹ️ Page is not in E-mails database - skipping automation');
       return { status: 'skipped', reason: 'Page not in E-mails database' };
     }
@@ -309,8 +309,7 @@ Format your response as valid JSON:
     }
 
     const response = await notion.blocks.children.list({
-      block_id: process.env.PROMPT_PAGE_ID,
-      page_size: 100
+      block_id: process.env.PROMPT_PAGE_ID
     });
 
     let prompt = '';
@@ -411,6 +410,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.1 - Sonnet 4 Restored`);
+  console.log(`🔧 Version: 10.3 - Final ID Consistency Fix`);
 });
+
 
