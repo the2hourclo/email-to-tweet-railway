@@ -49,7 +49,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.1 - Sonnet 4 Restored', // Version update
+    version: '10.2 - Debugging ID Mismatch', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -163,6 +163,12 @@ async function processEmailAutomation(pageId) {
     
     // The replace(/-/g, '') is necessary for comparison flexibility
     const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '');
+    
+    // DEBUGGING LOG: Prints the IDs being compared
+    console.log(`\nDEBUG: Comparing DB IDs:`);
+    console.log(`DEBUG: Expected (ENV): ${expectedDbId}`);
+    console.log(`DEBUG: Received (Page Parent): ${pageInfo.parent.database_id.replace(/-/g, '')}`);
+    console.log(`DEBUG: The two IDs must match exactly (ignoring hyphens).\n`);
     
     // Check if page is in the correct database
     if (!pageInfo.parent || 
@@ -407,3 +413,4 @@ app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
   console.log(`🔧 Version: 10.1 - Sonnet 4 Restored`);
 });
+
