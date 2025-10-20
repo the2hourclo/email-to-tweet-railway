@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '11.3 - Fixed Tweet Structure & CTA Links',
+    version: '11.4 - Respecting 2HourMan Methodology',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -204,8 +204,8 @@ async function processEmailAutomation(pageId) {
     const prompt = await getPromptFromNotion();
     console.log('✅ 2HourMan tweet prompt retrieved from Notion');
 
-    // Step 5: Generate tweets using enhanced structure
-    console.log('🤖 Step 5: Generating tweet concepts with enhanced structure...');
+    // Step 5: Generate tweets using the original 2HourMan methodology
+    console.log('🤖 Step 5: Generating tweets with 2HourMan methodology...');
     const tweetsData = await generateTweetsWithFullStructure(emailContent, prompt);
     console.log(`✅ Generated ${tweetsData.tweetConcepts.length} tweet concepts`);
 
@@ -358,321 +358,316 @@ For each tweet, ensure:
 Create 3-5 tweet concepts. For each, provide complete structure including CTA.`;
 }
 
-// ENHANCED: Generate tweets with better structure enforcement
+// CORRECTED: Generate tweets respecting the original 2HourMan methodology
 async function generateTweetsWithFullStructure(emailContent, prompt) {
   try {
-    // ENHANCED: More explicit instructions for Claude
-    const enhancedPrompt = `${prompt}
+    console.log('\n🔍 USING 2HOURMAN PROMPT FROM NOTION:');
+    console.log('Original prompt length:', prompt.length);
+    console.log('Prompt preview:', prompt.substring(0, 300) + '...');
 
-=== CRITICAL INSTRUCTIONS ===
+    // MINIMAL ADDITION: Only add technical output format requirements
+    // DO NOT override the 2HourMan methodology
+    const technicalFormatting = `
 
-You MUST follow the 2HourMan methodology exactly. Do NOT create a "fallback" or generic analysis.
+=== TECHNICAL OUTPUT FORMAT ONLY ===
+Please follow your 2HourMan methodology exactly as written above.
 
-REQUIRED OUTPUT FORMAT:
-For each tweet concept, you MUST provide:
+For the output format, please structure each tweet concept as:
 
-TWEET #1: [Specific concept title - NOT "Fallback Concept"]
+TWEET #1: [Your title]
 
 Main Content:
-[Actual tweet content here - write real tweets, not analysis]
+[Your tweet content following 2HourMan methodology]
 
 Single Aha Moment:
-[The ONE specific insight this tweet provides]
+[Your aha moment analysis]
 
 What-Why-Where Cycle Check:
-✅ WHAT: [How the concept is defined in the tweet]
-✅ WHY: [Why this matters - the mechanism/importance shown]
-✅ WHERE: [What action the reader should take]
+✅ WHAT: [Your what analysis]
+✅ WHY: [Your why analysis] 
+✅ WHERE: [Your where analysis]
 
 Character Counts:
 - Post 1: [X]/500 ✅
 
----
-
 CTA Tweet:
-[Specific CTA that bridges from this tweet's insight ending with the newsletter link]
-
-Character Count:
-- CTA: [X]/500 ✅
+[Your CTA ending with: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}]
 
 ---
 
-REPEAT for TWEET #2, TWEET #3, etc.
+(Repeat for each concept)
 
-=== END CRITICAL INSTRUCTIONS ===
+=== END TECHNICAL FORMAT ===
 
 SOURCE CONTENT TO ANALYZE:
 ${emailContent}
 
-NEWSLETTER LINK TO USE IN ALL CTAS: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}
+Please apply your 2HourMan methodology to this content.`;
 
-Now create 3-5 actual tweet concepts (not analysis) following this exact format.`;
+    const fullRequest = prompt + technicalFormatting;
 
-    console.log('\n📤 SENDING ENHANCED STRUCTURE REQUEST:');
-    console.log('Enhanced prompt length:', enhancedPrompt.length);
-    console.log('Newsletter link being enforced:', process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/');
+    console.log('\n📤 SENDING REQUEST WITH 2HOURMAN METHODOLOGY:');
+    console.log('Total request length:', fullRequest.length);
 
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME,
       max_tokens: 8000,
-      messages: [{ role: 'user', content: enhancedPrompt }]
+      messages: [{ role: 'user', content: fullRequest }]
     });
 
     const content = response.content[0].text;
     
-    console.log('\n📥 CLAUDE RESPONSE:');
+    console.log('\n📥 CLAUDE RESPONSE FOLLOWING 2HOURMAN METHOD:');
     console.log('Response length:', content.length);
-    console.log('First 800 characters:', content.substring(0, 800));
+    console.log('First 500 characters:', content.substring(0, 500));
     
-    // ENHANCED: More robust parsing
-    const tweetConcepts = parseEnhancedStructuredResponse(content);
+    // Parse using the original parsing logic (don't override)
+    const tweetConcepts = parseFullStructuredResponse(content);
     
-    // FORCE newsletter link in all CTAs
+    // Only fix newsletter links - don't change the content Claude created
     tweetConcepts.forEach((concept, index) => {
-      concept.cta = forceCorrectNewsletterLink(concept.cta);
-      console.log(`✅ Fixed CTA for concept ${index + 1}: ${concept.cta.substring(0, 100)}...`);
+      concept.cta = ensureNewsletterLinkInCTA(concept.cta);
+      console.log(`✅ Concept ${index + 1} processed with 2HourMan methodology`);
+      console.log(`   Title: ${concept.title}`);
+      console.log(`   Tweet length: ${concept.mainContent.posts[0]?.length || 0} characters`);
     });
     
-    console.log(`✅ Successfully parsed ${tweetConcepts.length} tweet concepts`);
+    console.log(`✅ Generated ${tweetConcepts.length} concepts using 2HourMan methodology`);
     
     return { tweetConcepts };
 
   } catch (error) {
-    console.error('❌ Error generating tweets:', error);
+    console.error('❌ Error generating tweets with 2HourMan methodology:', error);
     
-    // Better fallback with proper structure
+    // Even fallback should follow 2HourMan principles
     return {
       tweetConcepts: [{
         number: 1,
-        title: 'AI Business Efficiency Tweet',
+        title: 'Methodology Error',
         mainContent: {
-          posts: ['Most business owners are drowning in busy work while AI could compress their operations from 8 hours to 2 focused hours. The competitive advantage isn\'t avoiding AI—it\'s mastering operational leverage.'],
-          characterCounts: [203]
+          posts: ['Error applying 2HourMan methodology. Please check logs and retry with proper prompt structure.'],
+          characterCounts: [0]
         },
-        ahamoment: 'AI amplifies expertise rather than replacing it',
+        ahamoment: 'System error preventing proper methodology application',
         whatWhyWhere: {
-          what: 'AI as operational compression tool',
-          why: 'Creates competitive advantage through efficiency',
-          where: 'Focus on systems and leverage, not just tasks'
+          what: 'Technical error in prompt processing',
+          why: 'System unable to follow 2HourMan methodology',
+          where: 'Review prompt structure and retry automation'
         },
-        cta: `Understanding operational leverage is one thing. Having the systems that actually compress your workday is different. Get the complete framework: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-        qualityValidation: 'Fallback concept - manual review needed'
+        cta: `Technical error occurred. Get reliable automation insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
+        qualityValidation: 'Error - 2HourMan methodology not applied'
       }]
     };
   }
 }
 
-// ENHANCED: Better parsing that handles various Claude response formats
-function parseEnhancedStructuredResponse(content) {
+// Helper function to ensure newsletter link is properly included in CTA
+function ensureNewsletterLinkInCTA(cta) {
+  try {
+    const newsletterLink = process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/';
+    
+    // Check if the CTA already has a proper link at the end
+    if (cta.endsWith(newsletterLink)) {
+      console.log('✅ CTA already has correct newsletter link at end');
+      return cta;
+    }
+    
+    // Check if CTA has any link placeholder that needs to be replaced
+    if (cta.includes('[NEWSLETTER_LINK]')) {
+      const updatedCTA = cta.replace('[NEWSLETTER_LINK]', newsletterLink);
+      console.log('✅ Replaced [NEWSLETTER_LINK] placeholder with actual link');
+      return updatedCTA;
+    }
+    
+    if (cta.includes('[link]')) {
+      const updatedCTA = cta.replace('[link]', newsletterLink);
+      console.log('✅ Replaced [link] placeholder with newsletter link');
+      return updatedCTA;
+    }
+    
+    // If no link found, append it properly
+    if (!cta.includes('http')) {
+      // Remove any trailing punctuation and add the link
+      const cleanCTA = cta.replace(/[.!?]*$/, '');
+      const finalCTA = `${cleanCTA}: ${newsletterLink}`;
+      console.log('✅ Added newsletter link to CTA that was missing it');
+      return finalCTA;
+    }
+    
+    // If it has some other link, replace with newsletter link
+    const linkPattern = /(https?:\/\/[^\s]+)/g;
+    if (cta.match(linkPattern)) {
+      const updatedCTA = cta.replace(linkPattern, newsletterLink);
+      console.log('✅ Replaced existing link with newsletter link');
+      return updatedCTA;
+    }
+    
+    return cta;
+    
+  } catch (error) {
+    console.error('❌ Error processing CTA link:', error);
+    // Fallback: append newsletter link
+    return `${cta}\n\nGet more insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`;
+  }
+}
+
+// Parse full structured response (original function - no changes)
+function parseFullStructuredResponse(content) {
   const tweetConcepts = [];
   
   try {
-    console.log('\n🔍 ENHANCED PARSING:');
+    console.log('\n🔍 PARSING STRUCTURED RESPONSE:');
     
-    // Strategy 1: Look for numbered tweets
-    const tweetMatches = content.match(/TWEET\s*#\d+:[\s\S]*?(?=TWEET\s*#\d+:|$)/gi);
+    // Look for "TWEET #X:" pattern to identify concepts
+    const conceptMatches = content.match(/TWEET\s*#\d+:[\s\S]*?(?=TWEET\s*#\d+:|$)/gi);
     
-    if (tweetMatches && tweetMatches.length > 0) {
-      console.log(`✅ Found ${tweetMatches.length} structured tweets`);
+    if (conceptMatches && conceptMatches.length > 0) {
+      console.log(`✅ Found ${conceptMatches.length} tweet concepts`);
       
-      tweetMatches.forEach((match, index) => {
-        const concept = parseIndividualTweetConcept(match, index + 1);
-        if (concept) {
+      conceptMatches.forEach((match, index) => {
+        try {
+          const conceptNum = index + 1;
+          console.log(`\n📋 Parsing concept ${conceptNum}...`);
+          
+          // Extract title/description
+          const titleMatch = match.match(/TWEET\s*#\d+:\s*([^\n]+)/i);
+          const title = titleMatch ? titleMatch[1].trim() : `Tweet Concept ${conceptNum}`;
+          
+          // Extract main content (could be multiple posts)
+          const mainContentMatch = match.match(/Main Content:\s*([\s\S]*?)(?=\n\nSingle Aha Moment:|Single Aha Moment:|$)/i);
+          const mainContentText = mainContentMatch ? mainContentMatch[1].trim() : 'Content extraction failed';
+          
+          // Parse main content for multiple posts
+          const posts = parseMainContentPosts(mainContentText);
+          
+          // Extract aha moment
+          const ahaMatch = match.match(/Single Aha Moment:\s*([\s\S]*?)(?=\n\nWhat-Why-Where|What-Why-Where|$)/i);
+          const ahamoment = ahaMatch ? ahaMatch[1].trim() : 'Aha moment not identified';
+          
+          // Extract What-Why-Where analysis
+          const whatWhyWhereMatch = match.match(/What-Why-Where Check:\s*([\s\S]*?)(?=\n\nCharacter Count|Character Count|$)/i);
+          const whatWhyWhere = parseWhatWhyWhere(whatWhyWhereMatch ? whatWhyWhereMatch[1] : '');
+          
+          // Extract character counts
+          const charCountMatch = match.match(/Character Count[s]?:\s*([\s\S]*?)(?=\n\n---|CTA Tweet:|$)/i);
+          const characterCounts = parseCharacterCounts(charCountMatch ? charCountMatch[1] : '', posts.length);
+          
+          // Extract CTA tweet
+          const ctaMatch = match.match(/CTA Tweet:\s*([\s\S]*?)(?=\n\nCTA Uniqueness|CTA Uniqueness|Character Count|Quality Validation|$)/i);
+          let cta = ctaMatch ? ctaMatch[1].trim() : 'CTA not found';
+          
+          // Clean up CTA (remove extra formatting, ensure single line)
+          cta = cta.replace(/\n+/g, ' ').trim();
+          
+          console.log(`📝 Extracted CTA: ${cta.substring(0, 100)}...`);
+          
+          // Extract quality validation
+          const qualityMatch = match.match(/Quality Validation:\s*([\s\S]*?)(?=\n\n|$)/i);
+          const qualityValidation = qualityMatch ? qualityMatch[1].trim() : 'Quality validation not found';
+          
+          const concept = {
+            number: conceptNum,
+            title: title,
+            mainContent: {
+              posts: posts,
+              characterCounts: characterCounts
+            },
+            ahamoment: ahamoment,
+            whatWhyWhere: whatWhyWhere,
+            cta: cta,
+            qualityValidation: qualityValidation
+          };
+          
           tweetConcepts.push(concept);
+          console.log(`✅ Successfully parsed concept ${conceptNum}: "${title}"`);
+          
+        } catch (parseError) {
+          console.error(`❌ Error parsing concept ${index + 1}:`, parseError);
+          
+          // Add error concept with fallback CTA
+          tweetConcepts.push({
+            number: index + 1,
+            title: `Concept ${index + 1} - Parse Error`,
+            mainContent: {
+              posts: ['Failed to parse this concept from Claude response'],
+              characterCounts: [0]
+            },
+            ahamoment: 'Parse error occurred',
+            whatWhyWhere: {
+              what: 'Unable to extract analysis',
+              why: 'Parsing failed',
+              where: 'Check logs for details'
+            },
+            cta: `Error parsing content. Get reliable automation insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
+            qualityValidation: 'Parse error - validation not completed'
+          });
         }
       });
     } else {
-      console.log('⚠️ No TWEET # pattern found, trying alternative parsing...');
+      console.log('⚠️ No structured concepts found, creating fallback...');
       
-      // Strategy 2: Look for any structured content
-      const lines = content.split('\n').filter(line => line.trim().length > 10);
-      
-      if (lines.length > 5) {
-        // Find content that looks like tweets
-        const tweetLikeLines = lines.filter(line => {
-          const trimmed = line.trim();
-          return trimmed.length > 50 && 
-                 trimmed.length < 500 && 
-                 !trimmed.startsWith('#') &&
-                 !trimmed.startsWith('✅') &&
-                 !trimmed.includes('Character Count:');
-        });
-        
-        if (tweetLikeLines.length > 0) {
-          console.log(`📄 Found ${tweetLikeLines.length} tweet-like content lines`);
-          
-          // Create concepts from tweet-like content
-          tweetLikeLines.slice(0, 3).forEach((line, index) => {
-            tweetConcepts.push({
-              number: index + 1,
-              title: `Tweet Concept ${index + 1}`,
-              mainContent: {
-                posts: [line.trim()],
-                characterCounts: [line.trim().length]
-              },
-              ahamoment: `Key insight from concept ${index + 1}`,
-              whatWhyWhere: {
-                what: 'Concept defined from content',
-                why: 'Importance identified from context',
-                where: 'Action derived from insight'
-              },
-              cta: `Get more insights like this: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-              qualityValidation: 'Parsed from unstructured content'
-            });
-          });
-        }
-      }
-    }
-    
-    // If still no concepts, create one from the content
-    if (tweetConcepts.length === 0) {
-      console.log('🔧 Creating concept from raw content...');
-      
-      const shortContent = content.substring(0, 400).trim();
+      // Fallback: treat entire response as one concept
       tweetConcepts.push({
         number: 1,
-        title: 'Extracted Concept',
+        title: 'Fallback Concept',
         mainContent: {
-          posts: [shortContent],
-          characterCounts: [shortContent.length]
+          posts: [content.substring(0, 500).trim()],
+          characterCounts: [content.substring(0, 500).length]
         },
-        ahamoment: 'Insight extracted from response',
+        ahamoment: 'Unable to identify specific aha moment from response',
         whatWhyWhere: {
-          what: 'Content analysis attempted',
-          why: 'Structure not properly followed',
-          where: 'Review prompt and response'
+          what: 'Content analysis incomplete',
+          why: 'Response format not recognized',
+          where: 'Review Claude response structure'
         },
-        cta: `Get structured insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-        qualityValidation: 'Manual extraction required'
+        cta: `Get proven systems for business efficiency: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
+        qualityValidation: 'Fallback concept - manual review needed'
       });
     }
     
   } catch (error) {
-    console.error('❌ Enhanced parsing failed:', error);
+    console.error('❌ Complete parsing failure:', error);
     
-    // Final fallback
+    // Final fallback with working CTA
     tweetConcepts.push({
       number: 1,
-      title: 'Parse Error Recovery',
+      title: 'Parse Error',
       mainContent: {
-        posts: ['Error in content processing. Manual review needed.'],
+        posts: ['Complete parsing failure occurred'],
         characterCounts: [0]
       },
-      ahamoment: 'System error occurred',
+      ahamoment: 'Parse error occurred',
       whatWhyWhere: {
         what: 'Parsing system failed',
-        why: 'Technical error in processing',
-        where: 'Check logs and retry'
+        why: 'Unexpected response format',
+        where: 'Check system logs'
       },
-      cta: `System error. Get reliable content: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-      qualityValidation: 'Error recovery needed'
+      cta: `System error occurred. Get reliable automation content: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
+      qualityValidation: 'Error - validation not completed'
     });
   }
   
-  console.log(`📊 Enhanced parsing result: ${tweetConcepts.length} concepts created`);
+  console.log(`📊 Final parsing result: ${tweetConcepts.length} concepts created`);
   return tweetConcepts;
 }
 
-// Helper to parse individual tweet concepts
-function parseIndividualTweetConcept(match, conceptNum) {
+// Helper function to parse main content posts (handles splits)
+function parseMainContentPosts(contentText) {
   try {
-    // Extract title
-    const titleMatch = match.match(/TWEET\s*#\d+:\s*([^\n]+)/i);
-    const title = titleMatch ? titleMatch[1].trim() : `Tweet Concept ${conceptNum}`;
+    const postMatches = contentText.match(/Post\s+\d+:\s*([\s\S]*?)(?=Post\s+\d+:|$)/gi);
     
-    // Skip if it's a fallback concept
-    if (title.toLowerCase().includes('fallback')) {
-      console.log(`⚠️ Skipping fallback concept ${conceptNum}`);
-      return null;
+    if (postMatches && postMatches.length > 1) {
+      return postMatches.map(match => {
+        const postContent = match.replace(/Post\s+\d+:\s*/i, '').trim();
+        return postContent;
+      });
+    } else {
+      return [contentText];
     }
-    
-    // Extract main content
-    const mainContentMatch = match.match(/Main Content:\s*([\s\S]*?)(?=Single Aha Moment:|$)/i);
-    const mainContentText = mainContentMatch ? mainContentMatch[1].trim() : '';
-    
-    // Clean up main content (remove analysis markers)
-    const cleanContent = cleanMainContent(mainContentText);
-    
-    if (cleanContent.length < 20) {
-      console.log(`⚠️ Main content too short for concept ${conceptNum}`);
-      return null;
-    }
-    
-    // Extract other sections
-    const ahaMatch = match.match(/Single Aha Moment:\s*([\s\S]*?)(?=What-Why-Where|$)/i);
-    const ahamoment = ahaMatch ? ahaMatch[1].trim() : `Insight from concept ${conceptNum}`;
-    
-    const whatWhyWhereMatch = match.match(/What-Why-Where Check:\s*([\s\S]*?)(?=Character Count|CTA Tweet|$)/i);
-    const whatWhyWhere = parseWhatWhyWhere(whatWhyWhereMatch ? whatWhyWhereMatch[1] : '');
-    
-    const ctaMatch = match.match(/CTA Tweet:\s*([\s\S]*?)(?=Character Count|$)/i);
-    const cta = ctaMatch ? ctaMatch[1].trim() : `Get more insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`;
-    
-    return {
-      number: conceptNum,
-      title: title,
-      mainContent: {
-        posts: [cleanContent],
-        characterCounts: [cleanContent.length]
-      },
-      ahamoment: ahamoment,
-      whatWhyWhere: whatWhyWhere,
-      cta: cta,
-      qualityValidation: 'Parsed from structured response'
-    };
-    
   } catch (error) {
-    console.error(`❌ Error parsing individual concept ${conceptNum}:`, error);
-    return null;
+    console.error('Error parsing main content posts:', error);
+    return [contentText];
   }
-}
-
-// Helper to clean main content (remove analysis text)
-function cleanMainContent(content) {
-  // Remove common analysis markers
-  let cleaned = content
-    .replace(/# Phase 1:.*$/gm, '')
-    .replace(/## Core Message\/Theme.*$/gm, '')
-    .replace(/## Key Insights.*$/gm, '')
-    .replace(/- Free time.*$/gm, '')
-    .replace(/- Information.*$/gm, '')
-    .replace(/- High-retention.*$/gm, '')
-    .replace(/- AI exe.*$/gm, '')
-    .replace(/Character Count:.*$/gm, '')
-    .replace(/^\s*-\s/gm, '')
-    .replace(/^\s*\*\s/gm, '')
-    .replace(/^\s*#+ /gm, '')
-    .trim();
-  
-  // Extract the first substantial paragraph that looks like tweet content
-  const lines = cleaned.split('\n').filter(line => line.trim().length > 20);
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length > 50 && trimmed.length < 500 && 
-        !trimmed.includes('analysis') && 
-        !trimmed.includes('Phase') &&
-        !trimmed.includes('##')) {
-      return trimmed;
-    }
-  }
-  
-  // Fallback: use cleaned content
-  return cleaned.substring(0, 400).trim();
-}
-
-// ENHANCED: Force correct newsletter link
-function forceCorrectNewsletterLink(cta) {
-  const correctLink = process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/';
-  
-  // Remove any existing links
-  let cleanCTA = cta.replace(/https?:\/\/[^\s]+/g, '').trim();
-  
-  // Remove trailing punctuation
-  cleanCTA = cleanCTA.replace(/[.!?]*$/, '');
-  
-  // Add correct link
-  return `${cleanCTA}: ${correctLink}`;
 }
 
 // Helper function to parse What-Why-Where analysis
@@ -683,39 +678,17 @@ function parseWhatWhyWhere(analysisText) {
     const whereMatch = analysisText.match(/✅\s*WHERE:\s*([^\n]+)/i);
     
     return {
-      what: whatMatch ? whatMatch[1].trim() : 'Concept needs clear definition',
-      why: whyMatch ? whyMatch[1].trim() : 'Importance and mechanism to be identified',
-      where: whereMatch ? whereMatch[1].trim() : 'Action steps to be specified'
+      what: whatMatch ? whatMatch[1].trim() : 'WHAT analysis not found',
+      why: whyMatch ? whyMatch[1].trim() : 'WHY analysis not found',
+      where: whereMatch ? whereMatch[1].trim() : 'WHERE analysis not found'
     };
   } catch (error) {
     console.error('Error parsing What-Why-Where:', error);
     return {
-      what: 'Definition needed',
-      why: 'Importance unclear',
-      where: 'Action required'
+      what: 'Analysis parsing failed',
+      why: 'Analysis parsing failed',
+      where: 'Analysis parsing failed'
     };
-  }
-}
-
-// Helper function to parse main content posts (handles splits)
-function parseMainContentPosts(contentText) {
-  try {
-    // Look for "Post 1:", "Post 2:" pattern for split posts
-    const postMatches = contentText.match(/Post\s+\d+:\s*([\s\S]*?)(?=Post\s+\d+:|$)/gi);
-    
-    if (postMatches && postMatches.length > 1) {
-      // Multiple posts found
-      return postMatches.map(match => {
-        const postContent = match.replace(/Post\s+\d+:\s*/i, '').trim();
-        return postContent;
-      });
-    } else {
-      // Single post
-      return [contentText];
-    }
-  } catch (error) {
-    console.error('Error parsing main content posts:', error);
-    return [contentText];
   }
 }
 
@@ -730,7 +703,6 @@ function parseCharacterCounts(countText, expectedPosts) {
         return parseInt(count);
       });
     } else {
-      // Fallback: create default counts
       return Array(expectedPosts).fill(0);
     }
   } catch (error) {
@@ -1078,7 +1050,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 11.3 - Fixed Tweet Structure & CTA Links`);
+  console.log(`🔧 Version: 11.4 - Respecting 2HourMan Methodology`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
 });
