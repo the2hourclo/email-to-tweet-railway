@@ -1,373 +1,149 @@
 const express = require('express');
 const { Client } = require('@notionhq/client');
-const Anthropic = require('@anthropic-ai/sdk');
+// Using the recommended Claude 3.5 Sonnet model
+const Anthropic = require('@anthropic-ai/sdk'); 
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Initialize Notion and Anthropic clients
+// Middleware for parsing JSON bodies
+app.use(express.json());
+
+// Initialize clients (will use environment variables)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-app.use(express.json());
+// --- Environment Validation ---
+
+function validateEnvironment() {
+  const required = [
+    'NOTION_TOKEN',
+    'ANTHROPIC_API_KEY',
+    'EMAILS_DATABASE_ID',
+    'SHORTFORM_DATABASE_ID'
+  ];
+
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+    return false;
+  }
+  
+  console.log('✅ All required environment variables found');
+  return true;
+}
+
+// --- Endpoints ---
 
 // Health check endpoint
 app.get('/', (req, res) => {
-  res.json({
-    status: 'Email-to-Tweet Railway Server Running! 🚀',
-    config: {
-      notionToken: process.env.NOTION_TOKEN ? '✅ Set' : '❌ Missing',
-      anthropicKey: process.env.ANTHROPIC_API_KEY ? '✅ Set' : '❌ Missing',
-      emailsDb: process.env.EMAILS_DATABASE_ID ? '✅ Set' : '❌ Missing',
-      shortformDb: process.env.SHORTFORM_DATABASE_ID ? '✅ Set' : '❌ Missing',
-      promptPage: process.env.PROMPT_PAGE_ID ? '✅ Set' : '❌ Missing',
-      newsletterLink: process.env.NEWSLETTER_LINK ? '✅ Set' : '❌ Missing'
+  console.log('🏥 Health check requested');
+  
+  if (!validateEnvironment()) {
+    return res.status(500).json({ 
+      error: 'Missing environment variables',
+      status: 'unhealthy'
+    });
+  }
+
+  res.json({ 
+    message: 'Railway Email-to-Tweet Automation Server',
+    status: 'healthy',
+    version: '8.0 - Webhook Fix Implemented',
+    endpoints: {
+      health: '/',
+      webhook: '/webhook'
     },
-    timestamp: new Date().toISOString(),
-    version: '4.0 - Fixed Integration Webhooks'
+    config: {
+        notionToken: process.env.NOTION_TOKEN ? 'Set' : 'Missing',
+        anthropicKey: process.env.ANTHROPIC_API_KEY ? 'Set' : 'Missing',
+        emailDbId: process.env.EMAILS_DATABASE_ID ? 'Set' : 'Missing',
+        shortFormDbId: process.env.SHORTFORM_DATABASE_ID ? 'Set' : 'Missing',
+        promptPage: process.env.PROMPT_PAGE_ID || 'Default Prompt',
+    },
+    timestamp: new Date().toISOString()
   });
 });
 
-// Webhook endpoint - handles Integration webhooks based on ACTUAL Notion API documentation
+// Webhook endpoint for Notion database button
 app.post('/webhook', async (req, res) => {
   try {
-    console.log('=== WEBHOOK RECEIVED ===');
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
-    console.log('Body:', JSON.stringify(req.body, null, 2));
-    console.log('========================');
+    console.log('\n🔥 === NOTION BUTTON WEBHOOK RECEIVED ===');
+    console.log('📋 Headers:', JSON.stringify(req.headers, null, 2));
+    // Log keys for verification, but skip full body to avoid large output
+    console.log('🔍 Top-level Body Keys:', Object.keys(req.body)); 
 
-    // STEP 1: Handle Notion Integration Verification
-    if (req.body.verification_token) {
-      console.log('🔐 VERIFICATION TOKEN RECEIVED');
-      console.log('Token:', req.body.verification_token);
-      
-      res.status(200).json({ 
-        success: true, 
-        message: 'Verification token received',
-        timestamp: new Date().toISOString()
+    let pageId = null;
+
+    // 🏆 PRIMARY CHECK: The confirmed location for Page ID in Database Button Webhooks
+    if (req.body.data && req.body.data.id) {
+        // Notion database page IDs are nested under data.id
+        pageId = req.body.data.id;
+        console.log(`✅ Page ID found in req.body.data.id: ${pageId}`);
+    } 
+    // FALLBACKS (for compatibility with other webhook types if testing payload changed)
+    else if (req.body.page_id) {
+      pageId = req.body.page_id;
+      console.log(`📄 Page ID from page_id field (Fallback 1): ${pageId}`);
+    } else if (req.body.id) {
+      pageId = req.body.id;
+      console.log(`📄 Page ID from id field (Fallback 2): ${pageId}`);
+    } else {
+      // Deep search for a standard Notion ID format (UUID or 32-char hex)
+      for (const [key, value] of Object.entries(req.body)) {
+        if (typeof value === 'string' && 
+            (value.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/) || value.match(/^[a-f0-9]{32}$/))) {
+          pageId = value;
+          console.log(`📄 Page ID found via UUID search in ${key}: ${pageId}`);
+          break;
+        }
+      }
+    }
+
+
+    if (!pageId) {
+      console.log('❌ No page ID found in webhook payload');
+      return res.status(400).json({ 
+        error: 'No page ID found in webhook payload. Automation requires the triggering Page ID.',
+        received_keys: Object.keys(req.body)
       });
-      
-      console.log('✅ Verification response sent');
-      return;
     }
 
-    // STEP 2: Handle Integration Webhook Events - FIXED based on actual API docs
-    if (req.body.entity && req.body.entity.type === 'page') {
-      console.log('📄 INTEGRATION WEBHOOK EVENT RECEIVED');
-      
-      const pageId = req.body.entity.id; // CORRECT: entity.id is the page ID
-      const eventType = req.body.type;
-      
-      console.log('Event Type:', eventType);
-      console.log('Page ID:', pageId);
-      console.log('Entity Type:', req.body.entity.type);
-      
-      if (!pageId) {
-        throw new Error('No page ID found in Integration webhook entity');
-      }
-
-      // Only process page.properties_updated events (when user checks "Generate Content")
-      if (eventType === 'page.properties_updated') {
-        console.log('🎯 Processing page.properties_updated event');
-        
-        // Process the email page
-        console.log('🚀 Starting email processing...');
-        
-        // Get email content from the page
-        console.log('📖 Fetching email content...');
-        const emailContent = await getEmailContent(pageId);
-        
-        // Get prompt from Notion page
-        console.log('📝 Fetching prompt...');
-        const prompt = await getPromptFromNotion();
-        
-        // Generate tweets using Claude
-        console.log('🤖 Generating tweets...');
-        const tweetsData = await generateTweets(emailContent, prompt);
-        
-        // Create pages in Short Form database
-        console.log('📄 Creating short form pages...');
-        const results = await createShortFormPages(tweetsData, pageId);
-        
-        console.log('🎉 SUCCESS! Created', results.length, 'short form pages');
-        
-        res.status(200).json({
-          success: true,
-          message: `Successfully created ${results.length} short form pages`,
-          pageId: pageId,
-          eventType: eventType,
-          results: results,
-          timestamp: new Date().toISOString()
-        });
-        
-        return;
-      } else {
-        console.log(`ℹ️ Ignoring event type: ${eventType} (only processing page.properties_updated)`);
-        res.status(200).json({
-          success: true,
-          message: `Event ${eventType} received but not processed`,
-          pageId: pageId,
-          note: 'Only page.properties_updated events trigger content generation',
-          timestamp: new Date().toISOString()
-        });
-        return;
-      }
-    }
-
-    // STEP 3: Handle unknown webhook formats
-    console.log('❓ Unknown webhook format received');
-    console.log('Expected: Integration webhook with entity.type = "page"');
-    
-    res.status(400).json({
-      error: 'Unknown webhook format',
-      message: 'Webhook must be Integration webhook with page entity',
-      received: {
-        hasEntity: !!req.body.entity,
-        entityType: req.body.entity?.type,
-        eventType: req.body.type,
-        hasVerificationToken: !!req.body.verification_token
-      },
-      expected: 'Integration webhook with entity.type = "page" and type = "page.properties_updated"',
+    // Acknowledge webhook immediately (crucial to prevent Notion timeout)
+    res.status(200).json({ 
+      message: 'Webhook received and processing started',
+      page_id: pageId,
       timestamp: new Date().toISOString()
     });
 
+    // Process the automation asynchronously so the response can be sent instantly
+    processEmailAutomation(pageId)
+      .then(result => {
+        console.log('✅ Automation completed successfully:', result);
+      })
+      .catch(error => {
+        console.error('❌ Automation failed:', error);
+      });
+
   } catch (error) {
-    console.error('❌ Webhook processing error:', error);
-    
-    res.status(500).json({
-      error: 'Webhook processing failed',
+    console.error('❌ Webhook error:', error);
+    return res.status(500).json({ 
+      error: 'Internal server error',
       message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// Get email content from Notion page
-async function getEmailContent(pageId) {
+
+// --- Core Automation Functions ---
+
+// Main automation processing function
+async function processEmailAutomation(pageId) {
   try {
-    console.log(`📖 Fetching content for page: ${pageId}`);
+    console.log(`\n🚀 === STARTING AUTOMATION ===`);
+    console.log(`📄 Target Page ID: ${pageId}`);
 
-    const response = await notion.blocks.children.list({
-      block_id: pageId,
-      page_size: 100
-    });
+    // Step 1: Verify this
 
-    let content = '';
-    
-    for (const block of response.results) {
-      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
-        const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
-        content += text + '\n\n';
-      } 
-      else if (block.type === 'heading_1' && block.heading_1.rich_text.length > 0) {
-        const text = block.heading_1.rich_text.map(text => text.plain_text).join('');
-        content += '# ' + text + '\n\n';
-      } 
-      else if (block.type === 'heading_2' && block.heading_2.rich_text.length > 0) {
-        const text = block.heading_2.rich_text.map(text => text.plain_text).join('');
-        content += '## ' + text + '\n\n';
-      } 
-      else if (block.type === 'heading_3' && block.heading_3.rich_text.length > 0) {
-        const text = block.heading_3.rich_text.map(text => text.plain_text).join('');
-        content += '### ' + text + '\n\n';
-      }
-      else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
-        const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
-        content += '• ' + text + '\n';
-      }
-      else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text.length > 0) {
-        const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
-        content += '1. ' + text + '\n';
-      }
-      else if (block.type === 'quote' && block.quote.rich_text.length > 0) {
-        const text = block.quote.rich_text.map(text => text.plain_text).join('');
-        content += '> ' + text + '\n\n';
-      }
-      else if (block.type === 'code' && block.code.rich_text.length > 0) {
-        const text = block.code.rich_text.map(text => text.plain_text).join('');
-        content += '```\n' + text + '\n```\n\n';
-      }
-    }
-
-    if (!content.trim()) {
-      throw new Error('No content found in the email page. Make sure the page has text content (paragraphs, headings, lists, etc.)');
-    }
-
-    console.log(`✅ Extracted ${content.length} characters of content`);
-    console.log(`📝 Content preview: ${content.substring(0, 200)}...`);
-    return content.trim();
-  } catch (error) {
-    console.error('❌ Error fetching email content:', error);
-    throw new Error(`Failed to fetch email content: ${error.message}`);
-  }
-}
-
-// Get prompt from Notion page
-async function getPromptFromNotion() {
-  try {
-    if (!process.env.PROMPT_PAGE_ID) {
-      console.log('📝 Using fallback prompt (no PROMPT_PAGE_ID set)');
-      return `You are an expert content creator who specializes in converting newsletters and emails into engaging Twitter threads.
-
-Your task is to analyze the provided email content and create 5-7 different Twitter thread concepts.
-
-For each thread concept, provide:
-1. A compelling hook tweet (thread starter)
-2. 3-5 follow-up tweets that develop the idea
-3. A clear call-to-action
-
-Guidelines:
-- Keep each tweet under 280 characters
-- Use engaging, conversational tone
-- Focus on actionable insights
-- Include relevant hashtags
-- Return results in JSON format with threads array
-
-Format your response as valid JSON:
-{
-  "threads": [
-    {
-      "title": "Thread concept title",
-      "tweets": ["Tweet 1", "Tweet 2", "Tweet 3", "Tweet 4"]
-    }
-  ]
-}`;
-    }
-
-    console.log(`📝 Fetching prompt from Notion page: ${process.env.PROMPT_PAGE_ID}`);
-
-    const response = await notion.blocks.children.list({
-      block_id: process.env.PROMPT_PAGE_ID,
-      page_size: 100
-    });
-
-    let prompt = '';
-    for (const block of response.results) {
-      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
-        prompt += block.paragraph.rich_text.map(text => text.plain_text).join('') + '\n';
-      }
-    }
-
-    const finalPrompt = prompt.trim() || 'Create engaging Twitter threads from the email content provided.';
-    console.log(`✅ Prompt fetched: ${finalPrompt.substring(0, 100)}...`);
-    return finalPrompt;
-  } catch (error) {
-    console.error('❌ Error fetching prompt:', error);
-    console.log('📝 Using fallback prompt due to error');
-    return 'Create engaging Twitter threads from the email content provided.';
-  }
-}
-
-// Generate tweets using Claude
-async function generateTweets(emailContent, prompt) {
-  try {
-    console.log('🤖 Generating tweets with Claude...');
-    
-    const fullPrompt = `${prompt}
-
-EMAIL CONTENT:
-${emailContent}
-
-NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
-
-Generate 5-7 Twitter thread concepts in JSON format. Each thread should be engaging and actionable.`;
-
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: fullPrompt }]
-    });
-
-    const content = response.content[0].text;
-    console.log(`🤖 Claude response length: ${content.length} characters`);
-    
-    try {
-      // Extract JSON from Claude's response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        console.log(`✅ Successfully parsed ${parsed.threads?.length || 0} thread concepts`);
-        return parsed;
-      } else {
-        throw new Error('No JSON found in Claude response');
-      }
-    } catch (parseError) {
-      console.log('⚠️ JSON parsing failed, using fallback format');
-      console.log('Parse error:', parseError.message);
-      // Fallback if JSON parsing fails
-      return {
-        threads: [{
-          title: "Generated Twitter Content",
-          tweets: [
-            content.substring(0, 280),
-            content.substring(280, 560) || "Check out our newsletter for more insights!",
-            process.env.NEWSLETTER_LINK || "Subscribe for more content like this!"
-          ]
-        }]
-      };
-    }
-  } catch (error) {
-    console.error('❌ Error generating tweets:', error);
-    throw new Error(`Failed to generate tweets: ${error.message}`);
-  }
-}
-
-// Create pages in Short Form database
-async function createShortFormPages(tweetsData, emailPageId) {
-  try {
-    console.log(`📝 Creating ${tweetsData.threads.length} short form pages...`);
-    const results = [];
-
-    for (let i = 0; i < tweetsData.threads.length; i++) {
-      const thread = tweetsData.threads[i];
-      const content = thread.tweets.join('\n\n---\n\n');
-      
-      console.log(`📄 Creating page ${i + 1}: ${thread.title}`);
-      
-      const response = await notion.pages.create({
-        parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
-        properties: {
-          'Name': {
-            title: [{ text: { content: thread.title } }]
-          },
-          'E-mails': {
-            relation: [{ id: emailPageId }]
-          }
-        },
-        children: [{
-          object: 'block',
-          type: 'paragraph',
-          paragraph: {
-            rich_text: [{ type: 'text', text: { content: content } }]
-          }
-        }]
-      });
-
-      results.push({
-        id: response.id,
-        title: thread.title,
-        url: response.url,
-        tweet_count: thread.tweets.length
-      });
-      
-      console.log(`✅ Created: ${thread.title} (${response.id})`);
-    }
-
-    console.log(`🎉 Successfully created ${results.length} pages in Short Form database`);
-    return results;
-  } catch (error) {
-    console.error('❌ Error creating short form pages:', error);
-    throw new Error(`Failed to create pages: ${error.message}`);
-  }
-}
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}`);
-  console.log(`🎯 Webhook endpoint: http://localhost:${PORT}/webhook`);
-  console.log(`🔧 Version: 4.0 - Fixed Integration Webhooks (entity.id)`);
-  console.log(`📊 Enhanced logging enabled for debugging`);
-  console.log(`🔐 Supports verification tokens and Integration webhook events`);
-});
