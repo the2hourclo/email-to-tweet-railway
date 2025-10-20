@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.5 - Final Typo Fix Applied', // Version update
+    version: '10.6 - Final Model & Typo Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -342,7 +342,7 @@ NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4', // <<-- USING CLAUDE SONNET 4
+      model: 'claude-sonnet-4-20250514', // <<-- Changed to the specific timestamped model
       max_tokens: 4000,
       messages: [{ role: 'user', content: fullPrompt }]
     });
@@ -413,9 +413,5 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.4 - Final Typo Fix Applied`);
+  console.log(`🔧 Version: 10.6 - Final Model & Typo Fix`);
 });
-
-
-
-
