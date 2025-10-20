@@ -49,7 +49,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '9.2 - Updated to Claude Sonnet 4',
+    version: '10.1 - Sonnet 4 Restored', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -81,7 +81,7 @@ app.post('/webhook', async (req, res) => {
         pageId = req.body.data.id;
         console.log(`✅ Page ID found in req.body.data.id: ${pageId}`);
     } 
-    // FALLBACKS (Keeping your existing robust checks just in case)
+    // FALLBACKS (Kept for maximum compatibility, though we identified the primary location)
     else if (req.body.page_id) {
       pageId = req.body.page_id;
       console.log(`📄 Page ID from page_id field (Fallback 1): ${pageId}`);
@@ -148,10 +148,21 @@ async function processEmailAutomation(pageId) {
     console.log(`📄 Target Page ID: ${pageId}`);
 
     // Step 1: Verify this page is in the E-mails database and retrieve properties
-    console.log('🔍 Step 1: Verifying page is in E-mails database...');
+    console.log('🔍 Step 1: Retrieving and verifying source page...');
+    
+    let pageInfo;
+    try {
+        pageInfo = await notion.pages.retrieve({ page_id: pageId });
+    } catch (e) {
+        if (e.code === 'object_not_found') {
+             // We now specifically catch the error you were seeing and give a clearer message
+             throw new Error(`Notion Access Error: Could not find page ID ${pageId}. This usually means the page or its PARENT DATABASE is not shared with your integration. Please check the 'Share' settings on the database.`);
+        }
+        throw e; // re-throw other Notion errors
+    }
+    
     // The replace(/-/g, '') is necessary for comparison flexibility
     const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '');
-    const pageInfo = await notion.pages.retrieve({ page_id: pageId });
     
     // Check if page is in the correct database
     if (!pageInfo.parent || 
@@ -323,7 +334,7 @@ NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4', // <<-- UPDATED TO CLAUDE SONNET 4
+      model: 'claude-sonnet-4', // <<-- USING CLAUDE SONNET 4
       max_tokens: 4000,
       messages: [{ role: 'user', content: fullPrompt }]
     });
@@ -394,5 +405,5 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 9.2 - Updated to Claude Sonnet 4`);
+  console.log(`🔧 Version: 10.1 - Sonnet 4 Restored`);
 });
