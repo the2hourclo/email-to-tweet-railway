@@ -377,6 +377,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
          throw new Error(`Expected 'threads' property from Claude to be an array, but received ${typeof tweetsData.threads}. Claude may have ignored the JSON format instruction.`);
     }
 
+    // FINAL FIX: Use blocks array to add multiple paragraphs per page
     const blocks = [];
 
     for (let i = 0; i < tweetsData.threads.length; i++) {
@@ -441,7 +442,8 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.10 - Extreme Robustness Applied`);
+  console.log(`🔧 Version: 10.11 - Multi-Block Content Fix`);
 });
+
 
 
