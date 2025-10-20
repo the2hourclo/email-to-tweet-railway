@@ -10,7 +10,6 @@ app.use(express.json());
 
 // Initialize clients (will use environment variables)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
-// FIX APPLIED: Corrected typo from Anthantic to Anthropic
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // --- Environment Validation ---
@@ -51,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.11 - Multi-Block Content Fix', // Version update
+    version: '10.12 - Complete Content Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -72,12 +71,11 @@ app.get('/', (req, res) => {
 app.post('/webhook', async (req, res) => {
   try {
     console.log('\n🔥 === NOTION BUTTON WEBHOOK RECEIVED ===');
-    // Log keys for verification
     console.log('🔍 Top-level Body Keys:', Object.keys(req.body)); 
 
     let pageId = null;
 
-    // 🏆 PRIMARY CHECK: The confirmed location for Page ID in Database Button Webhooks
+    // PRIMARY CHECK: The confirmed location for Page ID in Database Button Webhooks
     if (req.body.data && req.body.data.id) {
         pageId = req.body.data.id;
         console.log(`✅ Page ID found in req.body.data.id: ${pageId}`);
@@ -103,7 +101,6 @@ app.post('/webhook', async (req, res) => {
         }
       }
     }
-
 
     if (!pageId) {
       console.log('❌ No page ID found in webhook payload');
@@ -139,7 +136,6 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-
 // --- Core Automation Functions ---
 
 // Main automation processing function
@@ -149,31 +145,25 @@ async function processEmailAutomation(pageId) {
     console.log(`📄 Target Page ID: ${pageId}`);
 
     // Step 1: Verify this page is in the E-mails database and retrieve properties
-    console.log('🔍 Step 1: Retrieving and verifying source page... (This step confirms your ENV variables are correct)');
+    console.log('🔍 Step 1: Retrieving and verifying source page...');
     
     let pageInfo;
     try {
         pageInfo = await notion.pages.retrieve({ page_id: pageId });
     } catch (e) {
         if (e.code === 'object_not_found') {
-             // We now specifically catch the error you were seeing and give a clearer message
              throw new Error(`Notion Access Error: Could not find page ID ${pageId}. This usually means the page or its PARENT DATABASE is not shared with your integration.`);
         }
-        throw e; // re-throw other Notion errors
+        throw e;
     }
     
-    // The replace(/-/g, '') is necessary for comparison flexibility
     const expectedDbId = process.env.EMAILS_DATABASE_ID.replace(/-/g, '').toLowerCase(); 
-    
-    // DEBUGGING LOG: Prints the IDs being compared
-    console.log(`\nDEBUG: Comparing DB IDs:`);
-    console.log(`DEBUG: Expected (ENV): ${expectedDbId}`);
-    // Extract the actual database ID from the page object parent and clean it for comparison
     const receivedDbId = pageInfo.parent.type === 'database_id' ? pageInfo.parent.database_id.replace(/-/g, '').toLowerCase() : 'Not a Database Page';
-    console.log(`DEBUG: Received (Page Parent): ${receivedDbId}`);
-    console.log(`DEBUG: The two IDs must match exactly (ignoring hyphens and case).\n`);
     
-    // Check if page is in the correct database (case-insensitive check)
+    console.log(`DEBUG: Expected DB ID: ${expectedDbId}`);
+    console.log(`DEBUG: Received DB ID: ${receivedDbId}`);
+    
+    // Check if page is in the correct database
     if (!pageInfo.parent || 
         pageInfo.parent.type !== 'database_id' || 
         receivedDbId !== expectedDbId) {
@@ -183,13 +173,13 @@ async function processEmailAutomation(pageId) {
 
     console.log('✅ Page confirmed to be in E-mails database');
 
-    // Step 2: Check if this email has already been processed (optional skip)
+    // Step 2: Check if this email has already been processed
     console.log('🔍 Step 2: Checking if email already processed...');
     
     const existingQuery = await notion.databases.query({
       database_id: process.env.SHORTFORM_DATABASE_ID,
       filter: {
-        property: 'E-mails', // Confirmed relation name
+        property: 'E-mails',
         relation: {
           contains: pageId
         }
@@ -250,7 +240,6 @@ async function getEmailContent(pageId) {
     let content = '';
     
     for (const block of response.results) {
-      // Logic for extracting various block types (paragraph, headings, lists, etc.)
       if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
         const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
         content += text + '\n\n';
@@ -267,11 +256,10 @@ async function getEmailContent(pageId) {
         const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
         content += '1. ' + text + '\n';
       }
-      // Add other relevant block types if necessary
     }
 
     if (!content.trim()) {
-      throw new Error('No readable content blocks found in the email page. The Notion page may be empty or use unsupported block types.');
+      throw new Error('No readable content blocks found in the email page.');
     }
 
     return content.trim();
@@ -280,7 +268,7 @@ async function getEmailContent(pageId) {
   }
 }
 
-// Get prompt from Notion page (using fallback if PROMPT_PAGE_ID not set)
+// Get prompt from Notion page
 async function getPromptFromNotion() {
   try {
     if (!process.env.PROMPT_PAGE_ID) {
@@ -329,7 +317,7 @@ Format your response as valid JSON:
   }
 }
 
-// Generate tweets using Claude
+// Generate tweets using Claude - WITH COMPREHENSIVE DEBUGGING
 async function generateTweets(emailContent, prompt) {
   try {
     const fullPrompt = `${prompt}
@@ -341,25 +329,67 @@ NEWSLETTER LINK: ${process.env.NEWSLETTER_LINK || 'https://your-newsletter.com'}
 
 Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be the single, valid JSON object starting with {"threads": [...]}.`;
 
+    console.log('\n📤 SENDING TO CLAUDE:');
+    console.log('Prompt length:', fullPrompt.length);
+    console.log('Model:', process.env.CLAUDE_MODEL_NAME);
+
     const response = await anthropic.messages.create({
-      model: process.env.CLAUDE_MODEL_NAME, // READING FROM NEW ENV VAR
+      model: process.env.CLAUDE_MODEL_NAME,
       max_tokens: 4000,
       messages: [{ role: 'user', content: fullPrompt }]
     });
 
     const content = response.content[0].text;
     
+    console.log('\n📥 CLAUDE RESPONSE DEBUG:');
+    console.log('Raw response length:', content.length);
+    console.log('First 500 characters:', content.substring(0, 500));
+    console.log('Last 200 characters:', content.substring(content.length - 200));
+    
     // Robustly search for the JSON block in the response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return parsed;
+      console.log('✅ JSON found in response');
+      console.log('JSON length:', jsonMatch[0].length);
+      
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        console.log('\n🔍 PARSED JSON STRUCTURE:');
+        console.log('Parsed type:', typeof parsed);
+        console.log('Has threads property:', 'threads' in parsed);
+        console.log('Threads type:', typeof parsed.threads);
+        console.log('Threads is array:', Array.isArray(parsed.threads));
+        console.log('Threads length:', parsed.threads?.length);
+        
+        if (parsed.threads && parsed.threads.length > 0) {
+          console.log('\n📋 FIRST THREAD ANALYSIS:');
+          const firstThread = parsed.threads[0];
+          console.log('Thread type:', typeof firstThread);
+          console.log('Thread keys:', Object.keys(firstThread));
+          console.log('Title:', firstThread.title);
+          console.log('Tweets type:', typeof firstThread.tweets);
+          console.log('Tweets is array:', Array.isArray(firstThread.tweets));
+          console.log('Tweets length:', firstThread.tweets?.length);
+          
+          if (Array.isArray(firstThread.tweets) && firstThread.tweets.length > 0) {
+            console.log('First tweet type:', typeof firstThread.tweets[0]);
+            console.log('First tweet preview:', firstThread.tweets[0].substring(0, 100));
+          }
+        }
+        
+        return parsed;
+      } catch (parseError) {
+        console.error('❌ JSON Parse Error:', parseError);
+        console.error('Failed JSON:', jsonMatch[0].substring(0, 500));
+        throw new Error('Claude response contained invalid JSON');
+      }
     } else {
-      // This is the fallback for bad Claude formatting
+      console.error('❌ No JSON found in Claude response');
+      console.error('Full response:', content);
       throw new Error('Claude response did not contain valid JSON in the expected format.');
     }
   } catch (error) {
-    // Check if the error is a rate limit or another transient issue before throwing
     if (error.status && error.status !== 404) {
       console.error(`Claude API Error: Status ${error.status}. Check API key and billing.`);
     }
@@ -367,69 +397,173 @@ Generate 5 Twitter thread concepts in JSON format. Your entire response MUST be 
   }
 }
 
-// Create pages in Short Form database
+// COMPLETELY FIXED: Create pages in Short Form database
 async function createShortFormPages(tweetsData, emailPageId) {
   try {
     const results = [];
 
-    // FIX APPLIED: Check if threads exists AND is an array before iterating
+    console.log('\n📝 CREATING PAGES - FULL DEBUG:');
+    console.log('tweetsData type:', typeof tweetsData);
+    console.log('tweetsData structure:', JSON.stringify(tweetsData, null, 2));
+
+    // Check if threads exists AND is an array before iterating
     if (!Array.isArray(tweetsData.threads)) {
-         throw new Error(`Expected 'threads' property from Claude to be an array, but received ${typeof tweetsData.threads}. Claude may have ignored the JSON format instruction.`);
+      throw new Error(`Expected 'threads' property from Claude to be an array, but received ${typeof tweetsData.threads}`);
     }
 
-    // FINAL FIX: Use blocks array to add multiple paragraphs per page
-    const blocks = [];
+    console.log(`Processing ${tweetsData.threads.length} threads...`);
 
+    // Process each thread separately - create one Notion page per thread
     for (let i = 0; i < tweetsData.threads.length; i++) {
       const thread = tweetsData.threads[i];
       
-      // Secondary robustness check: ensure tweets array exists and extract content
-      const threadTweets = Array.isArray(thread.tweets) ? thread.tweets : [];
+      console.log(`\n🧵 PROCESSING THREAD ${i + 1}:`);
+      console.log('Thread structure:', JSON.stringify(thread, null, 2));
+      
+      // Ensure tweets array exists and convert to strings
+      let threadTweets = [];
+      
+      if (Array.isArray(thread.tweets)) {
+        threadTweets = thread.tweets.map((tweet, tweetIndex) => {
+          console.log(`Tweet ${tweetIndex + 1} type:`, typeof tweet);
+          console.log(`Tweet ${tweetIndex + 1} content:`, tweet);
+          
+          // Convert to string explicitly
+          if (typeof tweet === 'string') {
+            return tweet;
+          } else if (typeof tweet === 'object' && tweet !== null) {
+            // Extract text from object if it's structured
+            if (tweet.text) return String(tweet.text);
+            if (tweet.content) return String(tweet.content);
+            if (tweet.message) return String(tweet.message);
+            return JSON.stringify(tweet);
+          } else {
+            return String(tweet);
+          }
+        });
+      } else {
+        console.log(`⚠️ Thread ${i + 1} tweets is not an array:`, thread.tweets);
+        threadTweets = [`Thread ${i + 1}: Invalid tweet format`];
+      }
 
-      // Create a block for every single tweet and separate with a divider
-      for(let j = 0; j < threadTweets.length; j++) {
-        const tweetContent = String(threadTweets[j]); // Ensure content is always a string
+      console.log(`Final processed tweets for thread ${i + 1}:`, threadTweets);
+
+      // Create blocks for this specific thread
+      const threadBlocks = [];
+      
+      // Add each tweet as a separate paragraph block
+      threadTweets.forEach((tweet, j) => {
+        const tweetContent = String(tweet).trim(); // Ensure it's a string
         
-        blocks.push({
+        if (tweetContent) {
+          console.log(`Adding tweet ${j + 1}: "${tweetContent.substring(0, 50)}..."`);
+          
+          threadBlocks.push({
+            object: 'block',
+            type: 'paragraph',
+            paragraph: {
+              rich_text: [{
+                type: 'text',
+                text: { content: tweetContent }
+              }]
+            }
+          });
+          
+          // Add divider between tweets (except after last tweet)
+          if (j < threadTweets.length - 1) {
+            threadBlocks.push({
+              object: 'block',
+              type: 'divider',
+              divider: {}
+            });
+          }
+        }
+      });
+
+      console.log(`Created ${threadBlocks.length} blocks for thread ${i + 1}`);
+
+      // If no valid blocks, create a fallback
+      if (threadBlocks.length === 0) {
+        threadBlocks.push({
           object: 'block',
           type: 'paragraph',
           paragraph: {
-            rich_text: [{ type: 'text', text: { content: tweetContent } }] // Correct structure
+            rich_text: [{
+              type: 'text',
+              text: { content: `Thread ${i + 1}: No valid content could be processed` }
+            }]
           }
         });
-        
-        // Add a divider block between tweets, but not after the last tweet of the thread
-        if (j < threadTweets.length - 1) {
-            blocks.push({
-                object: 'block',
-                type: 'divider',
-                divider: {}
-            });
-        }
       }
 
-      // Add a header/callout block for the thread title and page properties
-      const response = await notion.pages.create({
-        parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
-        properties: {
-          'Title': { // FINAL FIX: Using 'Title' based on your confirmation
-            title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
+      try {
+        // Create the page with blocks
+        const response = await notion.pages.create({
+          parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
+          properties: {
+            'Title': {
+              title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
+            },
+            'E-mails': {
+              relation: [{ id: emailPageId }]
+            }
           },
-          'E-mails': { // Confirmed Relation property name
-            relation: [{ id: emailPageId }]
-          }
-        },
-        // Write content blocks using the Append Block Children endpoint after creation
-        children: blocks // Pass all collected blocks for this page
-      });
+          children: threadBlocks
+        });
 
-      console.log(`✅ Successfully created page: ${response.id}`);
-      results.push({ id: response.id, title: thread.title });
+        console.log(`✅ Successfully created page ${i + 1}: ${response.id}`);
+        console.log(`   Title: ${thread.title || `Generated Thread ${i + 1}`}`);
+        console.log(`   Blocks added: ${threadBlocks.length}`);
+        
+        results.push({ 
+          id: response.id, 
+          title: thread.title || `Generated Thread ${i + 1}`,
+          blocks_count: threadBlocks.length
+        });
+
+      } catch (pageError) {
+        console.error(`❌ Failed to create page ${i + 1}:`, pageError);
+        
+        // Create a minimal fallback page
+        try {
+          const fallbackResponse = await notion.pages.create({
+            parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
+            properties: {
+              'Title': {
+                title: [{ text: { content: `Thread ${i + 1} - Error` } }]
+              },
+              'E-mails': {
+                relation: [{ id: emailPageId }]
+              }
+            },
+            children: [{
+              object: 'block',
+              type: 'paragraph',
+              paragraph: {
+                rich_text: [{
+                  type: 'text',
+                  text: { content: `Error creating content for thread ${i + 1}. Check logs for details.` }
+                }]
+              }
+            }]
+          });
+          
+          results.push({ 
+            id: fallbackResponse.id, 
+            title: `Thread ${i + 1} - Error`,
+            error: true
+          });
+        } catch (fallbackError) {
+          console.error(`❌ Even fallback creation failed for thread ${i + 1}:`, fallbackError);
+        }
+      }
     }
 
+    console.log(`\n✅ COMPLETED: Created ${results.length} pages total`);
     return results;
+
   } catch (error) {
-    console.error('❌ Error creating short form pages:', error);
+    console.error('❌ Error in createShortFormPages:', error);
     throw new Error(`Failed to create pages in Notion: ${error.message}`);
   }
 }
@@ -442,7 +576,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.11 - Multi-Block Content Fix`);
+  console.log(`🔧 Version: 10.12 - Complete Content Fix`);
 });
 
 
