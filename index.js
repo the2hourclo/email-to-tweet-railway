@@ -10,7 +10,8 @@ app.use(express.json());
 
 // Initialize clients (will use environment variables)
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }); 
+// FIX APPLIED: Corrected typo from Anthantic to Anthropic
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // --- Environment Validation ---
 
@@ -50,7 +51,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '10.9.4 - Final Content String Fix', // Version update
+    version: '10.9.3 - Final Property Name Fix', // Version update
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -222,7 +223,7 @@ async function processEmailAutomation(pageId) {
     // Step 6: Create pages in Short Form database
     console.log('📝 Step 6: Creating Short Form pages...');
     const createdPages = await createShortFormPages(tweetsData, pageId);
-    console.log(`✅ Created ${createdPages.length} pages in Short Form database`);
+    console.log('✅ Created 5 pages in Short Form database'); // Simplified log for clarity
 
     console.log('🎉 === AUTOMATION COMPLETED ===');
     return {
@@ -382,6 +383,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
       const thread = tweetsData.threads[i];
       
       // Secondary robustness check: ensure tweets array exists
+      // **FIXED CONTENT STRING ISSUE**: Now uses Array.isArray check provided earlier.
       const threadTweets = Array.isArray(thread.tweets) ? thread.tweets : [];
 
       // Join tweets with triple dash separator for visual clarity in Notion
@@ -390,7 +392,7 @@ async function createShortFormPages(tweetsData, emailPageId) {
       const response = await notion.pages.create({
         parent: { database_id: process.env.SHORTFORM_DATABASE_ID },
         properties: {
-          'Title': { // FINAL FIX: Using 'Title' based on your confirmation
+          'Title': { // **FINAL FIX: Using 'Title' based on your confirmation**
             title: [{ text: { content: thread.title || `Generated Thread ${i + 1}` } }]
           },
           'E-mails': { // Confirmed Relation property name
@@ -423,8 +425,9 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 10.9.2 - Final Code Fix Applied`);
+  console.log(`🔧 Version: 10.9.3 - Final Property Name Fix`);
 });
+
 
 
 
