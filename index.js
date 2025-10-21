@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '13.1 - API Fixed (Solutions A+I)',
+    version: '13.2 - JSON Output Fixed (Solutions A+I)',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -413,7 +413,26 @@ Here's the content to analyze and transform:
 
 ${emailContent}
 
-Please create 5 high-quality tweet concepts following the complete methodology. Focus on quality and strategic impact first, then format as clean JSON structure.`
+Please create 5 high-quality tweet concepts following the complete methodology. Focus on quality and strategic impact first, then format as clean JSON structure.
+
+IMPORTANT: Your response must be ONLY valid JSON in this exact format:
+{
+  "tweetConcepts": [
+    {
+      "number": 1,
+      "title": "Brief Description",
+      "mainContent": {
+        "posts": ["Tweet content under 500 chars"],
+        "characterCounts": ["X/500 ✅"]
+      },
+      "ahamoment": "Key insight",
+      "cta": "CTA tweet under 500 chars",
+      "qualityValidation": "Brief validation"
+    }
+  ]
+}
+
+No analysis, no explanation - just the JSON output.`
       }
     ];
 
@@ -785,7 +804,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 13.1 - API Fixed (Solutions A+I)`);
+  console.log(`🔧 Version: 13.2 - JSON Output Fixed (Solutions A+I)`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
 });
