@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '12.1 - Fixed JSON Parsing + Tweet Splitting',
+    version: '12.2 - Respecting Content Prompt (No Override)',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -200,12 +200,12 @@ async function processEmailAutomation(pageId) {
     console.log(`✅ Extracted ${emailContent.length} characters of content`);
 
     // Step 4: Get processing prompt from Notion
-    console.log('📝 Step 4: Getting 2HourMan tweet prompt from Notion...');
+    console.log('📝 Step 4: Getting content creation prompt from Notion...');
     const prompt = await getPromptFromNotion();
-    console.log('✅ 2HourMan tweet prompt retrieved from Notion');
+    console.log('✅ Content creation prompt retrieved from Notion');
 
-    // Step 5: Generate tweets using the original 2HourMan methodology
-    console.log('🤖 Step 5: Generating tweets with 2HourMan methodology...');
+    // Step 5: Generate tweets following the prompt methodology
+    console.log('🤖 Step 5: Generating tweets following prompt guidelines...');
     const tweetsData = await generateTweetsWithFullStructure(emailContent, prompt);
     console.log(`✅ Generated ${tweetsData.tweetConcepts.length} tweet concepts`);
 
@@ -377,52 +377,36 @@ Output must be valid JSON with this structure:
 }`;
 }
 
-// Generate tweets with Claude using the 2HourMan methodology - FIXED JSON PARSING
+// Generate tweets with Claude - RESPECTING Content Prompt (No Override)
 async function generateTweetsWithFullStructure(emailContent, prompt) {
   try {
-    console.log('🤖 Calling Claude API with 2HourMan methodology...');
+    console.log('🤖 Calling Claude API following content prompt guidelines...');
     
-    // Add technical formatting requirements while respecting the 2HourMan methodology
-    const technicalFormatting = `
-=== TECHNICAL OUTPUT FORMAT ONLY ===
-Please follow your 2HourMan methodology exactly as written above.
+    // MINIMAL JSON guidance - just ask for the format at the end, don't override methodology
+    const subtleJsonGuidance = `
 
-CRITICAL: Your response must be ONLY valid JSON in this exact format (no other text, no markdown code blocks):
-
+Please provide your response as valid JSON in this structure:
 {
   "tweetConcepts": [
     {
       "number": 1,
-      "title": "[Brief Description]",
+      "title": "Brief Description",
       "mainContent": {
-        "posts": [
-          "[Post 1 content - under 500 characters]",
-          "[Post 2 content - under 500 characters if needed]",
-          "[Post 3 content - under 500 characters if needed]"
-        ],
-        "characterCounts": [
-          "[X]/500 ✅ or ❌",
-          "[X]/500 ✅ or ❌", 
-          "[X]/500 ✅ or ❌"
-        ]
+        "posts": ["tweet content"],
+        "characterCounts": ["X/500 ✅"]
       },
-      "ahamoment": "[Core insight]",
-      "cta": "[CTA tweet under 500 characters with newsletter link placeholder]",
-      "qualityValidation": "[Brief validation summary]"
+      "ahamoment": "core insight",
+      "cta": "CTA tweet",
+      "qualityValidation": "validation note"
     }
   ]
 }
 
-REQUIREMENTS:
-- Generate exactly 5 tweet concepts
-- Each individual post must be under 500 characters
-- Include accurate character counts with ✅ or ❌
-- CTA must be under 500 characters
-- Valid JSON syntax only - NO markdown code blocks
-- If any content exceeds 500 characters, split into multiple posts with proper flow
-`;
+Content to transform:
 
-    const fullPrompt = `${prompt}\n\n${technicalFormatting}\n\nContent to transform:\n\n${emailContent}`;
+${emailContent}`;
+
+    const fullPrompt = `${prompt}${subtleJsonGuidance}`;
     
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME,
@@ -781,7 +765,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 12.1 - Fixed JSON Parsing + Tweet Splitting`);
+  console.log(`🔧 Version: 12.2 - Respecting Content Prompt (No Override)`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
 });
