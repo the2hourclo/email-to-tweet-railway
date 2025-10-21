@@ -16,6 +16,52 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const EnhancedContentGenerator = require('./enhanced-content-generator');
 const contentGenerator = new EnhancedContentGenerator(anthropic, null);
 
+// CRITICAL FIX: Robust JSON extraction utility function
+function extractJSON(text) {
+  try {
+    // Try parsing directly first
+    return JSON.parse(text);
+  } catch (e) {
+    console.log('🔍 Direct JSON parse failed, trying extraction methods...');
+    
+    try {
+      // Method 1: Extract from ```json blocks
+      const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonBlockMatch) {
+        console.log('✅ Found JSON in code block');
+        return JSON.parse(jsonBlockMatch[1]);
+      }
+
+      // Method 2: Extract from ```javascript blocks  
+      const jsBlockMatch = text.match(/```javascript\s*([\s\S]*?)\s*```/);
+      if (jsBlockMatch) {
+        console.log('✅ Found JSON in JS code block');
+        return JSON.parse(jsBlockMatch[1]);
+      }
+
+      // Method 3: Find JSON object in text
+      const objectMatch = text.match(/\{[\s\S]*\}/);
+      if (objectMatch) {
+        console.log('✅ Found JSON object in text');
+        return JSON.parse(objectMatch[0]);
+      }
+
+      // Method 4: Look for response after "Response:" or similar
+      const responseMatch = text.match(/(?:Response|Result|Output):\s*(\{[\s\S]*\})/i);
+      if (responseMatch) {
+        console.log('✅ Found JSON after response indicator');
+        return JSON.parse(responseMatch[1]);
+      }
+
+      throw new Error('No valid JSON found in response');
+    } catch (parseError) {
+      console.error('❌ All JSON extraction methods failed');
+      console.error('Raw response:', text.substring(0, 200) + '...');
+      throw new Error(`JSON extraction failed: ${parseError.message}`);
+    }
+  }
+}
+
 // --- Environment Validation ---
 
 function validateEnvironment() {
@@ -268,20 +314,46 @@ async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
   
   console.log('⚡ Using Single-Pass Generation');
   
+  // FIXED: Enhanced single-pass prompt with strict JSON requirements
+  const enhancedPrompt = `
+CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
+
+${prompt}
+
+EMAIL CONTENT:
+${emailContent}
+
+Your response must be exactly this JSON format with no additional text:
+{
+  "tweetConcepts": [
+    {
+      "concept": "",
+      "strategy": "",
+      "mainContent": {
+        "posts": [""],
+        "characterCounts": [""]
+      },
+      "cta": ""
+    }
+  ]
+}`;
+  
   // Original single-pass approach (fallback or when multi-pass disabled)
   const response = await anthropic.messages.create({
     model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
     max_tokens: 4000,
     messages: [{ 
       role: 'user', 
-      content: `${prompt}\n\nEMAIL CONTENT:\n${emailContent}` 
+      content: enhancedPrompt
     }]
   });
 
+  // FIXED: Use robust JSON extraction instead of direct parsing
   try {
-    return JSON.parse(response.content[0].text);
+    return extractJSON(response.content[0].text);
   } catch (e) {
     console.error('❌ JSON parsing failed in single-pass generation');
+    console.error('Raw response:', response.content[0].text.substring(0, 300) + '...');
     throw new Error('Failed to parse generation response');
   }
 }
@@ -299,64 +371,58 @@ function logGenerationMetrics(result, startTime) {
   let avgCharCount = 0;
   let overLimitCount = 0;
   
-  result.tweetConcepts.forEach(tweet => {
-    totalPosts += tweet.mainContent.posts.length;
-    tweet.mainContent.posts.forEach(post => {
+  result.tweetConcepts.forEach((concept, i) => {
+    totalPosts += concept.mainContent.posts.length;
+    concept.mainContent.posts.forEach(post => {
       avgCharCount += post.length;
       if (post.length > 500) overLimitCount++;
     });
+    
+    console.log(`📄 Concept ${i + 1}: ${concept.mainContent.posts.length} posts, CTA: ${concept.cta.length} chars`);
   });
   
   avgCharCount = Math.round(avgCharCount / totalPosts);
   
   console.log(`📊 Total Posts: ${totalPosts}`);
-  console.log(`📏 Avg Character Count: ${avgCharCount}`);
-  console.log(`⚠️  Over Limit Posts: ${overLimitCount}`);
-  console.log(`✅ Quality Score: ${overLimitCount === 0 ? 'PASS' : 'NEEDS REVIEW'}`);
+  console.log(`📊 Avg Character Count: ${avgCharCount}`);
+  console.log(`⚠️  Over 500 chars: ${overLimitCount}`);
+  console.log(`✅ Generation Quality: ${overLimitCount === 0 ? 'EXCELLENT' : 'NEEDS REVIEW'}`);
 }
 
-// Get email content from Notion page
+// Extract text content from a Notion page
 async function getEmailContent(pageId) {
   try {
-    const response = await notion.blocks.children.list({
+    const blocks = await notion.blocks.children.list({
       block_id: pageId,
       page_size: 100
     });
 
     let content = '';
     
-    for (const block of response.results) {
-      if (block.type === 'paragraph' && block.paragraph?.rich_text) {
-        const text = block.paragraph.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
+    for (const block of blocks.results) {
+      if (block.type === 'paragraph' && block.paragraph.rich_text) {
+        const text = block.paragraph.rich_text.map(rt => rt.plain_text).join('');
         content += text + '\n';
-      } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item?.rich_text) {
-        const text = block.bulleted_list_item.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
+      } else if (block.type === 'heading_1' && block.heading_1.rich_text) {
+        const text = block.heading_1.rich_text.map(rt => rt.plain_text).join('');
+        content += text + '\n';
+      } else if (block.type === 'heading_2' && block.heading_2.rich_text) {
+        const text = block.heading_2.rich_text.map(rt => rt.plain_text).join('');
+        content += text + '\n';
+      } else if (block.type === 'heading_3' && block.heading_3.rich_text) {
+        const text = block.heading_3.rich_text.map(rt => rt.plain_text).join('');
+        content += text + '\n';
+      } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text) {
+        const text = block.bulleted_list_item.rich_text.map(rt => rt.plain_text).join('');
         content += '• ' + text + '\n';
-      } else if (block.type === 'numbered_list_item' && block.numbered_list_item?.rich_text) {
-        const text = block.numbered_list_item.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        content += '1. ' + text + '\n';
-      } else if (block.type === 'heading_1' && block.heading_1?.rich_text) {
-        const text = block.heading_1.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        content += '# ' + text + '\n';
-      } else if (block.type === 'heading_2' && block.heading_2?.rich_text) {
-        const text = block.heading_2.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        content += '## ' + text + '\n';
-      } else if (block.type === 'heading_3' && block.heading_3?.rich_text) {
-        const text = block.heading_3.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        content += '### ' + text + '\n';
+      } else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text) {
+        const text = block.numbered_list_item.rich_text.map(rt => rt.plain_text).join('');
+        content += text + '\n';
       }
+    }
+
+    if (!content.trim()) {
+      throw new Error('No content found in the email page');
     }
 
     return content.trim();
@@ -366,104 +432,149 @@ async function getEmailContent(pageId) {
   }
 }
 
-// Get prompt from Notion page
+// Get the content creation prompt from Notion
 async function getPromptFromNotion() {
-  const promptPageId = process.env.PROMPT_PAGE_ID;
-  
-  if (!promptPageId) {
-    console.log('⚠️ No PROMPT_PAGE_ID provided, using simplified fallback');
-    return `
-Transform this email content into 5 high-quality tweet concepts.
-
-Create tweets that:
-- Have strong hooks that grab attention
-- Include clear value propositions
-- Are under 500 characters per post
-- Have specific CTAs that reference the content
-- Include proper What-Why-Where cycles
-
-Respond in JSON format with exactly 5 tweet concepts, each having:
-- number, title, mainContent (posts array), characterCounts, ahamoment, cta, qualityValidation
-`;
-  }
-
   try {
-    const response = await notion.blocks.children.list({
+    const promptPageId = process.env.PROMPT_PAGE_ID;
+    
+    if (!promptPageId) {
+      console.log('⚠️ No PROMPT_PAGE_ID found, using simplified fallback prompt');
+      return getSimplifiedPrompt();
+    }
+
+    const blocks = await notion.blocks.children.list({
       block_id: promptPageId,
       page_size: 100
     });
 
     let promptContent = '';
     
-    for (const block of response.results) {
-      if (block.type === 'paragraph' && block.paragraph?.rich_text) {
-        const text = block.paragraph.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
+    for (const block of blocks.results) {
+      if (block.type === 'paragraph' && block.paragraph.rich_text) {
+        const text = block.paragraph.rich_text.map(rt => rt.plain_text).join('');
         promptContent += text + '\n';
-      } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item?.rich_text) {
-        const text = block.bulleted_list_item.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        promptContent += '• ' + text + '\n';
-      } else if (block.type === 'numbered_list_item' && block.numbered_list_item?.rich_text) {
-        const text = block.numbered_list_item.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        promptContent += '1. ' + text + '\n';
-      } else if (block.type === 'heading_1' && block.heading_1?.rich_text) {
-        const text = block.heading_1.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        promptContent += '# ' + text + '\n';
-      } else if (block.type === 'heading_2' && block.heading_2?.rich_text) {
-        const text = block.heading_2.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        promptContent += '## ' + text + '\n';
-      } else if (block.type === 'heading_3' && block.heading_3?.rich_text) {
-        const text = block.heading_3.rich_text
-          .map(textObj => textObj.plain_text || '')
-          .join('');
-        promptContent += '### ' + text + '\n';
+      } else if (block.type === 'heading_1' && block.heading_1.rich_text) {
+        const text = block.heading_1.rich_text.map(rt => rt.plain_text).join('');
+        promptContent += '\n# ' + text + '\n';
+      } else if (block.type === 'heading_2' && block.heading_2.rich_text) {
+        const text = block.heading_2.rich_text.map(rt => rt.plain_text).join('');
+        promptContent += '\n## ' + text + '\n';
+      } else if (block.type === 'heading_3' && block.heading_3.rich_text) {
+        const text = block.heading_3.rich_text.map(rt => rt.plain_text).join('');
+        promptContent += '\n### ' + text + '\n';
+      } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text) {
+        const text = block.bulleted_list_item.rich_text.map(rt => rt.plain_text).join('');
+        promptContent += '- ' + text + '\n';
+      } else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text) {
+        const text = block.numbered_list_item.rich_text.map(rt => rt.plain_text).join('');
+        promptContent += text + '\n';
+      } else if (block.type === 'code' && block.code.rich_text) {
+        const text = block.code.rich_text.map(rt => rt.plain_text).join('');
+        promptContent += '```\n' + text + '\n```\n';
       }
+    }
+
+    if (!promptContent.trim()) {
+      console.log('⚠️ Empty prompt content from Notion, using fallback');
+      return getSimplifiedPrompt();
     }
 
     console.log(`✅ Retrieved ${promptContent.length} characters of prompt content from Notion`);
     return promptContent.trim();
-
+    
   } catch (error) {
-    console.error('❌ Error retrieving prompt from Notion:', error);
-    console.log('⚠️ Falling back to simplified prompt');
-    return `
-Transform this email content into 5 high-quality tweet concepts.
-
-Create tweets that:
-- Have strong hooks that grab attention
-- Include clear value propositions
-- Are under 500 characters per post
-- Have specific CTAs that reference the content
-- Include proper What-Why-Where cycles
-
-Respond in JSON format with exactly 5 tweet concepts, each having:
-- number, title, mainContent (posts array), characterCounts, ahamoment, cta, qualityValidation
-`;
+    console.error('❌ Error getting prompt from Notion:', error);
+    console.log('🔄 Using simplified fallback prompt due to error');
+    return getSimplifiedPrompt();
   }
 }
 
-// Create full structure pages in Notion
+// Simplified fallback prompt
+function getSimplifiedPrompt() {
+  return `
+Transform this email content into high-quality, engaging tweets that capture the key insights and value.
+
+REQUIREMENTS:
+1. Create 2-3 tweet concepts maximum
+2. Each tweet should have a clear hook, insight, and value
+3. Keep posts under 500 characters each
+4. Include character counts for each post
+5. Add a compelling CTA tweet for each concept
+6. Make sure each tweet is self-contained and valuable
+
+Return in this JSON format:
+{
+  "tweetConcepts": [
+    {
+      "concept": "Brief description of the concept",
+      "strategy": "Content strategy used",
+      "mainContent": {
+        "posts": ["Tweet text here"],
+        "characterCounts": ["150/500 ✅"]
+      },
+      "cta": "Call to action tweet text"
+    }
+  ]
+}
+`;
+}
+
+// Create Notion pages with complete structure including all elements
 async function createFullStructurePages(tweetsData, emailPageId) {
   try {
-    console.log('\n📝 Creating full structure pages...');
-    console.log(`📊 Processing ${tweetsData.tweetConcepts.length} tweet concepts`);
+    console.log('\n📄 === CREATING NOTION PAGES WITH FULL STRUCTURE ===');
     
+    if (!tweetsData.tweetConcepts || tweetsData.tweetConcepts.length === 0) {
+      throw new Error('No tweet concepts found in the generated data');
+    }
+
     const results = [];
-    
+
     for (let i = 0; i < tweetsData.tweetConcepts.length; i++) {
       const concept = tweetsData.tweetConcepts[i];
-      console.log(`\n🔨 Creating page ${i + 1}: "${concept.title}"`);
       
+      console.log(`\n🏗️ Creating page ${i + 1}/${tweetsData.tweetConcepts.length}`);
+      console.log(`   Concept: ${concept.concept}`);
+      console.log(`   Posts: ${concept.mainContent.posts.length}`);
+      console.log(`   Strategy: ${concept.strategy}`);
+
+      // Build blocks array for the page content
       const blocks = [];
+      
+      // Title and concept overview
+      blocks.push({
+        object: 'block',
+        type: 'heading_1',
+        heading_1: {
+          rich_text: [{
+            type: 'text',
+            text: { content: concept.concept }
+          }]
+        }
+      });
+      
+      // Strategy section
+      blocks.push({
+        object: 'block',
+        type: 'heading_2',
+        heading_2: {
+          rich_text: [{
+            type: 'text',
+            text: { content: 'Strategy:' }
+          }]
+        }
+      });
+      
+      blocks.push({
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [{
+            type: 'text',
+            text: { content: concept.strategy }
+          }]
+        }
+      });
       
       // Main Content section
       blocks.push({
@@ -472,12 +583,12 @@ async function createFullStructurePages(tweetsData, emailPageId) {
         heading_2: {
           rich_text: [{
             type: 'text',
-            text: { content: 'Main Content:' }
+            text: { content: 'Tweet Content:' }
           }]
         }
       });
       
-      // Add each post with character count and dividers
+      // Add each post with character counts
       concept.mainContent.posts.forEach((post, postIndex) => {
         // Add the post content
         blocks.push({
