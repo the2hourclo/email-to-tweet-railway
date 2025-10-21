@@ -12,6 +12,10 @@ app.use(express.json());
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// NEW: Import the enhanced content generator
+const EnhancedContentGenerator = require('./enhanced-content-generator');
+const contentGenerator = new EnhancedContentGenerator(anthropic, null);
+
 // --- Environment Validation ---
 
 function validateEnvironment() {
@@ -50,7 +54,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '13.2 - JSON Output Fixed (Solutions A+I)',
+    version: '14.0 - Multi-Pass Generation System',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -63,6 +67,7 @@ app.get('/', (req, res) => {
         modelName: process.env.CLAUDE_MODEL_NAME ? process.env.CLAUDE_MODEL_NAME : 'Missing',
         promptPage: process.env.PROMPT_PAGE_ID || 'Default Prompt',
         newsletterLink: process.env.NEWSLETTER_LINK || 'Not Set',
+        multiPassEnabled: process.env.ENABLE_MULTIPASS || 'false',
     },
     timestamp: new Date().toISOString()
   });
@@ -204,10 +209,16 @@ async function processEmailAutomation(pageId) {
     const prompt = await getPromptFromNotion();
     console.log('✅ Content creation prompt retrieved from Notion');
 
-    // Step 5: Generate tweets using enhanced API approach (Solutions A+I)
+    // Step 5: Generate tweets using enhanced multi-pass approach
     console.log('🤖 Step 5: Generating tweets with enhanced quality approach...');
+    const startTime = Date.now();
+    
     const tweetsData = await generateTweetsWithEnhancedQuality(emailContent, prompt);
-    console.log(`✅ Generated ${tweetsData.tweetConcepts.length} tweet concepts`);
+    
+    // Log generation metrics
+    logGenerationMetrics(tweetsData, startTime);
+    
+    console.log(`✅ Generated ${tweetsData.tweetConcepts.length} tweet concepts with enhanced quality`);
 
     // Step 6: Create pages with complete structure
     console.log('📝 Step 6: Creating full structure pages...');
@@ -230,6 +241,80 @@ async function processEmailAutomation(pageId) {
   }
 }
 
+// ENHANCED: Multi-pass tweet generation with quality improvement
+async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
+  const useMultiPass = process.env.ENABLE_MULTIPASS === 'true';
+  
+  if (useMultiPass) {
+    console.log('🎯 Using Multi-Pass Generation System');
+    try {
+      // Set the base prompt on the generator
+      contentGenerator.basePrompt = prompt;
+      
+      // Use multi-pass generation
+      const result = await contentGenerator.generateTweetsWithMultiPass(
+        emailContent, 
+        process.env.NEWSLETTER_LINK
+      );
+      
+      console.log('✅ Multi-Pass Generation Complete');
+      return result;
+      
+    } catch (error) {
+      console.error('❌ Multi-pass generation failed, falling back to single-pass:', error);
+      // Fall through to single-pass generation
+    }
+  }
+  
+  console.log('⚡ Using Single-Pass Generation');
+  
+  // Original single-pass approach (fallback or when multi-pass disabled)
+  const response = await anthropic.messages.create({
+    model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
+    max_tokens: 4000,
+    messages: [{ 
+      role: 'user', 
+      content: `${prompt}\n\nEMAIL CONTENT:\n${emailContent}` 
+    }]
+  });
+
+  try {
+    return JSON.parse(response.content[0].text);
+  } catch (e) {
+    console.error('❌ JSON parsing failed in single-pass generation');
+    throw new Error('Failed to parse generation response');
+  }
+}
+
+// NEW: Enhanced monitoring function to track improvement
+function logGenerationMetrics(result, startTime) {
+  const endTime = Date.now();
+  const duration = endTime - startTime;
+  
+  console.log('\n📈 GENERATION METRICS:');
+  console.log(`⏱️  Total Time: ${duration}ms`);
+  console.log(`📝 Concepts Generated: ${result.tweetConcepts.length}`);
+  
+  let totalPosts = 0;
+  let avgCharCount = 0;
+  let overLimitCount = 0;
+  
+  result.tweetConcepts.forEach(tweet => {
+    totalPosts += tweet.mainContent.posts.length;
+    tweet.mainContent.posts.forEach(post => {
+      avgCharCount += post.length;
+      if (post.length > 500) overLimitCount++;
+    });
+  });
+  
+  avgCharCount = Math.round(avgCharCount / totalPosts);
+  
+  console.log(`📊 Total Posts: ${totalPosts}`);
+  console.log(`📏 Avg Character Count: ${avgCharCount}`);
+  console.log(`⚠️  Over Limit Posts: ${overLimitCount}`);
+  console.log(`✅ Quality Score: ${overLimitCount === 0 ? 'PASS' : 'NEEDS REVIEW'}`);
+}
+
 // Get email content from Notion page
 async function getEmailContent(pageId) {
   try {
@@ -241,37 +326,36 @@ async function getEmailContent(pageId) {
     let content = '';
     
     for (const block of response.results) {
-      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
-        const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
-        content += text + '\n\n';
-      } 
-      else if (block.type === 'heading_1' && block.heading_1.rich_text.length > 0) {
-        const text = block.heading_1.rich_text.map(text => text.plain_text).join('');
-        content += '# ' + text + '\n\n';
-      }
-      else if (block.type === 'heading_2' && block.heading_2.rich_text.length > 0) {
-        const text = block.heading_2.rich_text.map(text => text.plain_text).join('');
-        content += '## ' + text + '\n\n';
-      }
-      else if (block.type === 'heading_3' && block.heading_3.rich_text.length > 0) {
-        const text = block.heading_3.rich_text.map(text => text.plain_text).join('');
-        content += '### ' + text + '\n\n';
-      }
-      else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
-        const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
-        content += '- ' + text + '\n';
-      }
-      else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text.length > 0) {
-        const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
+      if (block.type === 'paragraph' && block.paragraph?.rich_text) {
+        const text = block.paragraph.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        content += text + '\n';
+      } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item?.rich_text) {
+        const text = block.bulleted_list_item.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        content += '• ' + text + '\n';
+      } else if (block.type === 'numbered_list_item' && block.numbered_list_item?.rich_text) {
+        const text = block.numbered_list_item.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
         content += '1. ' + text + '\n';
-      }
-      else if (block.type === 'quote' && block.quote.rich_text.length > 0) {
-        const text = block.quote.rich_text.map(text => text.plain_text).join('');
-        content += '> ' + text + '\n\n';
-      }
-      else if (block.type === 'code' && block.code.rich_text.length > 0) {
-        const text = block.code.rich_text.map(text => text.plain_text).join('');
-        content += '```\n' + text + '\n```\n\n';
+      } else if (block.type === 'heading_1' && block.heading_1?.rich_text) {
+        const text = block.heading_1.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        content += '# ' + text + '\n';
+      } else if (block.type === 'heading_2' && block.heading_2?.rich_text) {
+        const text = block.heading_2.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        content += '## ' + text + '\n';
+      } else if (block.type === 'heading_3' && block.heading_3?.rich_text) {
+        const text = block.heading_3.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        content += '### ' + text + '\n';
       }
     }
 
@@ -282,276 +366,102 @@ async function getEmailContent(pageId) {
   }
 }
 
-// Get prompt from Notion page or use default
+// Get prompt from Notion page
 async function getPromptFromNotion() {
-  try {
-    if (!process.env.PROMPT_PAGE_ID) {
-      console.log('ℹ️ No PROMPT_PAGE_ID set, using simplified default prompt');
-      return getDefaultPrompt();
-    }
+  const promptPageId = process.env.PROMPT_PAGE_ID;
+  
+  if (!promptPageId) {
+    console.log('⚠️ No PROMPT_PAGE_ID provided, using simplified fallback');
+    return `
+Transform this email content into 5 high-quality tweet concepts.
 
-    console.log(`📄 Fetching prompt from Notion page: ${process.env.PROMPT_PAGE_ID}`);
-    
+Create tweets that:
+- Have strong hooks that grab attention
+- Include clear value propositions
+- Are under 500 characters per post
+- Have specific CTAs that reference the content
+- Include proper What-Why-Where cycles
+
+Respond in JSON format with exactly 5 tweet concepts, each having:
+- number, title, mainContent (posts array), characterCounts, ahamoment, cta, qualityValidation
+`;
+  }
+
+  try {
     const response = await notion.blocks.children.list({
-      block_id: process.env.PROMPT_PAGE_ID,
+      block_id: promptPageId,
       page_size: 100
     });
 
-    let prompt = '';
+    let promptContent = '';
     
     for (const block of response.results) {
-      if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
-        const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
-        prompt += text + '\n\n';
-      } 
-      else if (block.type === 'heading_1' && block.heading_1.rich_text.length > 0) {
-        const text = block.heading_1.rich_text.map(text => text.plain_text).join('');
-        prompt += '# ' + text + '\n\n';
-      }
-      else if (block.type === 'heading_2' && block.heading_2.rich_text.length > 0) {
-        const text = block.heading_2.rich_text.map(text => text.plain_text).join('');
-        prompt += '## ' + text + '\n\n';
-      }
-      else if (block.type === 'heading_3' && block.heading_3.rich_text.length > 0) {
-        const text = block.heading_3.rich_text.map(text => text.plain_text).join('');
-        prompt += '### ' + text + '\n\n';
-      }
-      else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
-        const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
-        prompt += '- ' + text + '\n';
-      }
-      else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text.length > 0) {
-        const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
-        prompt += '1. ' + text + '\n';
-      }
-      else if (block.type === 'quote' && block.quote.rich_text.length > 0) {
-        const text = block.quote.rich_text.map(text => text.plain_text).join('');
-        prompt += '> ' + text + '\n\n';
-      }
-      else if (block.type === 'code' && block.code.rich_text.length > 0) {
-        const text = block.code.rich_text.map(text => text.plain_text).join('');
-        prompt += '```\n' + text + '\n```\n\n';
+      if (block.type === 'paragraph' && block.paragraph?.rich_text) {
+        const text = block.paragraph.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        promptContent += text + '\n';
+      } else if (block.type === 'bulleted_list_item' && block.bulleted_list_item?.rich_text) {
+        const text = block.bulleted_list_item.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        promptContent += '• ' + text + '\n';
+      } else if (block.type === 'numbered_list_item' && block.numbered_list_item?.rich_text) {
+        const text = block.numbered_list_item.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        promptContent += '1. ' + text + '\n';
+      } else if (block.type === 'heading_1' && block.heading_1?.rich_text) {
+        const text = block.heading_1.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        promptContent += '# ' + text + '\n';
+      } else if (block.type === 'heading_2' && block.heading_2?.rich_text) {
+        const text = block.heading_2.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        promptContent += '## ' + text + '\n';
+      } else if (block.type === 'heading_3' && block.heading_3?.rich_text) {
+        const text = block.heading_3.rich_text
+          .map(textObj => textObj.plain_text || '')
+          .join('');
+        promptContent += '### ' + text + '\n';
       }
     }
 
-    if (!prompt.trim()) {
-      console.log('⚠️ Notion prompt page was empty, using default prompt');
-      return getDefaultPrompt();
-    }
-
-    console.log(`✅ Successfully loaded ${prompt.length} characters of prompt from Notion`);
-    return prompt.trim();
+    console.log(`✅ Retrieved ${promptContent.length} characters of prompt content from Notion`);
+    return promptContent.trim();
 
   } catch (error) {
-    console.error('❌ Error fetching prompt from Notion:', error);
-    console.log('ℹ️ Falling back to default prompt');
-    return getDefaultPrompt();
+    console.error('❌ Error retrieving prompt from Notion:', error);
+    console.log('⚠️ Falling back to simplified prompt');
+    return `
+Transform this email content into 5 high-quality tweet concepts.
+
+Create tweets that:
+- Have strong hooks that grab attention
+- Include clear value propositions
+- Are under 500 characters per post
+- Have specific CTAs that reference the content
+- Include proper What-Why-Where cycles
+
+Respond in JSON format with exactly 5 tweet concepts, each having:
+- number, title, mainContent (posts array), characterCounts, ahamoment, cta, qualityValidation
+`;
   }
 }
 
-// Fallback prompt if Notion page unavailable
-function getDefaultPrompt() {
-  return `You are a content extraction specialist for the 2 Hour Man brand. Transform the provided content into 5 high-quality tweet concepts following these requirements:
-
-1. Each tweet must be under 500 characters
-2. If content exceeds 500 characters, split into multiple posts
-3. Include What-Why-Where cycle analysis (internal use only)
-4. Generate one CTA tweet per concept
-5. Focus on actionable insights from the source content
-
-Output must be valid JSON with this structure:
-{
-  "tweetConcepts": [
-    {
-      "number": 1,
-      "title": "Brief Description",
-      "mainContent": {
-        "posts": ["Tweet content under 500 chars"],
-        "characterCounts": ["X/500 ✅"]
-      },
-      "ahamoment": "Key insight",
-      "cta": "CTA tweet under 500 chars",
-      "qualityValidation": "Brief validation"
-    }
-  ]
-}`;
-}
-
-// SOLUTION A + I: Enhanced API call with CORRECTED system parameter structure
-async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
-  try {
-    console.log('🤖 Calling Claude API with enhanced quality approach (Solutions A+I)...');
-    
-    // SOLUTION A: System message as top-level parameter (CORRECTED FORMAT)
-    const systemMessage = `You are an expert content strategist and copywriter specializing in high-converting social media content. You have deep expertise in psychological triggers, audience psychology, and content that drives real engagement and conversions. Your writing is strategic, insightful, and creates genuine value for readers.
-
-You excel at:
-- Extracting core insights from long-form content
-- Creating psychological hooks that capture attention
-- Building compelling narratives that drive action
-- Crafting CTAs that create genuine curiosity gaps
-- Using specific examples and concrete details
-- Explaining mechanisms, not just naming concepts`;
-
-    // SOLUTION I: Interactive conversation flow
-    const messages = [
-      {
-        role: 'user',
-        content: prompt
-      },
-      {
-        role: 'assistant',
-        content: `I understand. I'm ready to transform content into high-quality tweet concepts following your complete methodology. I'll focus on creating content that feels authentic, strategic, and conversion-focused - the same quality you'd expect from our best manual work.
-
-Let me know what content you'd like me to analyze and transform.`
-      },
-      {
-        role: 'user', 
-        content: `Perfect! Let's work on this together. I'll share the email content, and you'll create strategic tweet concepts using your expertise.
-
-Here's the content to analyze and transform:
-
-${emailContent}
-
-Please create 5 high-quality tweet concepts following the complete methodology. Focus on quality and strategic impact first, then format as clean JSON structure.
-
-IMPORTANT: Your response must be ONLY valid JSON in this exact format:
-{
-  "tweetConcepts": [
-    {
-      "number": 1,
-      "title": "Brief Description",
-      "mainContent": {
-        "posts": ["Tweet content under 500 chars"],
-        "characterCounts": ["X/500 ✅"]
-      },
-      "ahamoment": "Key insight",
-      "cta": "CTA tweet under 500 chars",
-      "qualityValidation": "Brief validation"
-    }
-  ]
-}
-
-No analysis, no explanation - just the JSON output.`
-      }
-    ];
-
-    // CORRECTED API CALL: system as top-level parameter, NOT in messages array
-    const response = await anthropic.messages.create({
-      model: process.env.CLAUDE_MODEL_NAME,
-      max_tokens: 6000, // Increased for more detailed responses
-      temperature: 0.85, // Higher creativity for better content
-      top_p: 0.9, // Better sampling
-      system: systemMessage, // ✅ CORRECT - system as top-level parameter
-      messages: messages // ✅ CORRECT - no system role in messages array
-    });
-
-    console.log('✅ Claude API call completed');
-    
-    const responseText = response.content[0].text;
-    console.log(`📝 Raw response length: ${responseText.length} characters`);
-
-    try {
-      // Strip markdown code blocks if Claude wrapped the JSON
-      let cleanedResponse = responseText.trim();
-      
-      // Remove opening ```json or ``` 
-      if (cleanedResponse.startsWith('```json')) {
-        cleanedResponse = cleanedResponse.substring(7); // Remove ```json
-      } else if (cleanedResponse.startsWith('```')) {
-        cleanedResponse = cleanedResponse.substring(3); // Remove ```
-      }
-      
-      // Remove closing ```
-      if (cleanedResponse.endsWith('```')) {
-        cleanedResponse = cleanedResponse.slice(0, -3); // Remove trailing ```
-      }
-      
-      // Clean up any extra whitespace
-      cleanedResponse = cleanedResponse.trim();
-      
-      console.log(`🧹 Cleaned response length: ${cleanedResponse.length} characters`);
-      
-      const parsedResponse = JSON.parse(cleanedResponse);
-      console.log(`✅ Successfully parsed JSON response`);
-      console.log(`📊 Generated ${parsedResponse.tweetConcepts.length} tweet concepts`);
-      
-      // Validate structure
-      if (!parsedResponse.tweetConcepts || !Array.isArray(parsedResponse.tweetConcepts)) {
-        throw new Error('Invalid JSON structure: missing tweetConcepts array');
-      }
-      
-      // Auto-replace [newsletter link] or [link] with actual newsletter link
-      const newsletterLink = process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/';
-      
-      parsedResponse.tweetConcepts.forEach((concept, index) => {
-        if (concept.cta) {
-          concept.cta = concept.cta.replace(/\[newsletter link\]/g, newsletterLink);
-          concept.cta = concept.cta.replace(/\[link\]/g, newsletterLink);
-        }
-        
-        console.log(`\n🔍 Concept ${index + 1}:`);
-        console.log(`   Title: ${concept.title}`);
-        console.log(`   Posts: ${concept.mainContent.posts.length}`);
-        console.log(`   CTA length: ${concept.cta.length} characters`);
-      });
-      
-      return parsedResponse;
-      
-    } catch (parseError) {
-      console.error('❌ Failed to parse Claude response as JSON:', parseError);
-      console.log('📝 Raw response for debugging:', responseText.substring(0, 500) + '...');
-      
-      // Try one more cleanup attempt
-      try {
-        // More aggressive cleanup
-        let lastAttempt = responseText
-          .replace(/```json/g, '')
-          .replace(/```/g, '')
-          .trim();
-        
-        // Find the first { and last }
-        const firstBrace = lastAttempt.indexOf('{');
-        const lastBrace = lastAttempt.lastIndexOf('}');
-        
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          lastAttempt = lastAttempt.substring(firstBrace, lastBrace + 1);
-          console.log(`🔧 Attempting aggressive cleanup...`);
-          
-          // Apply newsletter link replacement before parsing
-          const newsletterLink = process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/';
-          lastAttempt = lastAttempt.replace(/\[newsletter link\]/g, newsletterLink);
-          lastAttempt = lastAttempt.replace(/\[link\]/g, newsletterLink);
-          
-          const finalParsed = JSON.parse(lastAttempt);
-          console.log(`✅ Aggressive cleanup successful!`);
-          return finalParsed;
-        }
-      } catch (finalError) {
-        console.error('❌ Final cleanup attempt failed:', finalError);
-      }
-      
-      throw new Error(`Invalid JSON response from Claude: ${parseError.message}`);
-    }
-
-  } catch (error) {
-    console.error('❌ Error generating tweets with Claude:', error);
-    throw new Error(`Failed to generate tweets: ${error.message}`);
-  }
-}
-
-// Create full structure pages in Notion with proper splitting and dividers - REMOVED What-Why-Where display
+// Create full structure pages in Notion
 async function createFullStructurePages(tweetsData, emailPageId) {
   try {
-    console.log(`\n📝 Creating ${tweetsData.tweetConcepts.length} full structure pages...`);
+    console.log('\n📝 Creating full structure pages...');
+    console.log(`📊 Processing ${tweetsData.tweetConcepts.length} tweet concepts`);
     
     const results = [];
-
+    
     for (let i = 0; i < tweetsData.tweetConcepts.length; i++) {
       const concept = tweetsData.tweetConcepts[i];
-      console.log(`\n🔨 Creating page ${i + 1}/${tweetsData.tweetConcepts.length}`);
-      console.log(`   Concept: ${concept.title}`);
-      console.log(`   Posts: ${concept.mainContent.posts.length}`);
+      console.log(`\n🔨 Creating page ${i + 1}: "${concept.title}"`);
       
       const blocks = [];
       
@@ -639,9 +549,6 @@ async function createFullStructurePages(tweetsData, emailPageId) {
           }]
         }
       });
-      
-      // REMOVED: What-Why-Where Cycle Check section (as requested)
-      // This section has been completely removed from Notion display
       
       // Divider before CTA
       blocks.push({
@@ -804,7 +711,8 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 13.2 - JSON Output Fixed (Solutions A+I)`);
+  console.log(`🔧 Version: 14.0 - Multi-Pass Generation System`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
+  console.log(`🎯 Multi-Pass Generation: ${process.env.ENABLE_MULTIPASS === 'true' ? 'ENABLED' : 'DISABLED'}`);
 });
