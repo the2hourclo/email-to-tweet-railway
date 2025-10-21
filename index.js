@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '12.2 - Respecting Content Prompt (No Override)',
+    version: '13.0 - Enhanced API Quality (Solutions A+I)',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -204,9 +204,9 @@ async function processEmailAutomation(pageId) {
     const prompt = await getPromptFromNotion();
     console.log('✅ Content creation prompt retrieved from Notion');
 
-    // Step 5: Generate tweets following the prompt methodology
-    console.log('🤖 Step 5: Generating tweets following prompt guidelines...');
-    const tweetsData = await generateTweetsWithFullStructure(emailContent, prompt);
+    // Step 5: Generate tweets using enhanced API approach (Solutions A+I)
+    console.log('🤖 Step 5: Generating tweets with enhanced quality approach...');
+    const tweetsData = await generateTweetsWithEnhancedQuality(emailContent, prompt);
     console.log(`✅ Generated ${tweetsData.tweetConcepts.length} tweet concepts`);
 
     // Step 6: Create pages with complete structure
@@ -377,47 +377,53 @@ Output must be valid JSON with this structure:
 }`;
 }
 
-// Generate tweets with Claude - RESPECTING Content Prompt (No Override)
-async function generateTweetsWithFullStructure(emailContent, prompt) {
+// SOLUTION A + I: Enhanced API call with better message architecture and interactive simulation
+async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
   try {
-    console.log('🤖 Calling Claude API following content prompt guidelines...');
+    console.log('🤖 Calling Claude API with enhanced quality approach (Solutions A+I)...');
     
-    // MINIMAL JSON guidance - just ask for the format at the end, don't override methodology
-    const subtleJsonGuidance = `
+    // SOLUTION A: Message Architecture - Separate system/assistant roles for better processing
+    const messages = [
+      {
+        role: 'system',
+        content: `You are an expert content strategist and copywriter specializing in high-converting social media content. You have deep expertise in psychological triggers, audience psychology, and content that drives real engagement and conversions. Your writing is strategic, insightful, and creates genuine value for readers.
 
-Please provide your response as valid JSON in this structure:
-{
-  "tweetConcepts": [
-    {
-      "number": 1,
-      "title": "Brief Description",
-      "mainContent": {
-        "posts": ["tweet content"],
-        "characterCounts": ["X/500 ✅"]
+You excel at:
+- Extracting core insights from long-form content
+- Creating psychological hooks that capture attention
+- Building compelling narratives that drive action
+- Crafting CTAs that create genuine curiosity gaps
+- Using specific examples and concrete details
+- Explaining mechanisms, not just naming concepts`
       },
-      "ahamoment": "core insight",
-      "cta": "CTA tweet",
-      "qualityValidation": "validation note"
-    }
-  ]
-}
+      {
+        role: 'user',
+        content: prompt
+      },
+      {
+        role: 'assistant',
+        content: `I understand. I'm ready to transform content into high-quality tweet concepts following your complete methodology. I'll focus on creating content that feels authentic, strategic, and conversion-focused - the same quality you'd expect from our best manual work.
 
-Content to transform:
+Let me know what content you'd like me to analyze and transform.`
+      },
+      {
+        role: 'user', 
+        content: `Perfect! Let's work on this together. I'll share the email content, and you'll create strategic tweet concepts using your expertise.
 
-${emailContent}`;
+Here's the content to analyze and transform:
 
-    const fullPrompt = `${prompt}${subtleJsonGuidance}`;
-    
+${emailContent}
+
+Please create 5 high-quality tweet concepts following the complete methodology. Focus on quality and strategic impact first, then format as clean JSON structure.`
+      }
+    ];
+
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME,
-      max_tokens: 4000,
-      temperature: 0.7,
-      messages: [
-        {
-          role: 'user',
-          content: fullPrompt
-        }
-      ]
+      max_tokens: 6000, // Increased for more detailed responses
+      temperature: 0.85, // Higher creativity for better content
+      top_p: 0.9, // Better sampling
+      messages: messages
     });
 
     console.log('✅ Claude API call completed');
@@ -455,8 +461,15 @@ ${emailContent}`;
         throw new Error('Invalid JSON structure: missing tweetConcepts array');
       }
       
-      // Log concept details
+      // Auto-replace [newsletter link] or [link] with actual newsletter link
+      const newsletterLink = process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/';
+      
       parsedResponse.tweetConcepts.forEach((concept, index) => {
+        if (concept.cta) {
+          concept.cta = concept.cta.replace(/\[newsletter link\]/g, newsletterLink);
+          concept.cta = concept.cta.replace(/\[link\]/g, newsletterLink);
+        }
+        
         console.log(`\n🔍 Concept ${index + 1}:`);
         console.log(`   Title: ${concept.title}`);
         console.log(`   Posts: ${concept.mainContent.posts.length}`);
@@ -484,6 +497,12 @@ ${emailContent}`;
         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
           lastAttempt = lastAttempt.substring(firstBrace, lastBrace + 1);
           console.log(`🔧 Attempting aggressive cleanup...`);
+          
+          // Apply newsletter link replacement before parsing
+          const newsletterLink = process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/';
+          lastAttempt = lastAttempt.replace(/\[newsletter link\]/g, newsletterLink);
+          lastAttempt = lastAttempt.replace(/\[link\]/g, newsletterLink);
+          
           const finalParsed = JSON.parse(lastAttempt);
           console.log(`✅ Aggressive cleanup successful!`);
           return finalParsed;
@@ -765,7 +784,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 12.2 - Respecting Content Prompt (No Override)`);
+  console.log(`🔧 Version: 13.0 - Enhanced API Quality (Solutions A+I)`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
 });
