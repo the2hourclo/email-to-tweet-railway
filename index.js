@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '11.4 - Respecting 2HourMan Methodology',
+    version: '12.0 - Proper Tweet Splitting with Dividers',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -245,46 +245,57 @@ async function getEmailContent(pageId) {
         const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
         content += text + '\n\n';
       } 
-      else if (block.type.startsWith('heading') && block[block.type].rich_text.length > 0) {
-        const text = block[block.type].rich_text.map(text => text.plain_text).join('');
-        content += (block.type === 'heading_1' ? '# ' : block.type === 'heading_2' ? '## ' : '### ') + text + '\n\n';
-      } 
+      else if (block.type === 'heading_1' && block.heading_1.rich_text.length > 0) {
+        const text = block.heading_1.rich_text.map(text => text.plain_text).join('');
+        content += '# ' + text + '\n\n';
+      }
+      else if (block.type === 'heading_2' && block.heading_2.rich_text.length > 0) {
+        const text = block.heading_2.rich_text.map(text => text.plain_text).join('');
+        content += '## ' + text + '\n\n';
+      }
+      else if (block.type === 'heading_3' && block.heading_3.rich_text.length > 0) {
+        const text = block.heading_3.rich_text.map(text => text.plain_text).join('');
+        content += '### ' + text + '\n\n';
+      }
       else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
         const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
-        content += '• ' + text + '\n';
+        content += '- ' + text + '\n';
       }
       else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text.length > 0) {
         const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
         content += '1. ' + text + '\n';
       }
-    }
-
-    if (!content.trim()) {
-      throw new Error('No readable content blocks found in the email page.');
+      else if (block.type === 'quote' && block.quote.rich_text.length > 0) {
+        const text = block.quote.rich_text.map(text => text.plain_text).join('');
+        content += '> ' + text + '\n\n';
+      }
+      else if (block.type === 'code' && block.code.rich_text.length > 0) {
+        const text = block.code.rich_text.map(text => text.plain_text).join('');
+        content += '```\n' + text + '\n```\n\n';
+      }
     }
 
     return content.trim();
   } catch (error) {
-    throw new Error(`Failed to fetch email content: ${error.message}`);
+    console.error('❌ Error extracting email content:', error);
+    throw new Error(`Failed to extract email content: ${error.message}`);
   }
 }
 
-// Get prompt from Notion page
+// Get prompt from Notion page or use default
 async function getPromptFromNotion() {
   try {
-    console.log(`🔍 Reading 2HourMan prompt from Notion page ID: ${process.env.PROMPT_PAGE_ID}`);
-    
     if (!process.env.PROMPT_PAGE_ID) {
-      console.log('⚠️ No PROMPT_PAGE_ID set, using simplified fallback prompt');
-      return getSimplifiedPromptWithCTA();
+      console.log('ℹ️ No PROMPT_PAGE_ID set, using simplified default prompt');
+      return getDefaultPrompt();
     }
 
+    console.log(`📄 Fetching prompt from Notion page: ${process.env.PROMPT_PAGE_ID}`);
+    
     const response = await notion.blocks.children.list({
       block_id: process.env.PROMPT_PAGE_ID,
       page_size: 100
     });
-
-    console.log(`📄 Found ${response.results.length} blocks in prompt page`);
 
     let prompt = '';
     
@@ -292,18 +303,30 @@ async function getPromptFromNotion() {
       if (block.type === 'paragraph' && block.paragraph.rich_text.length > 0) {
         const text = block.paragraph.rich_text.map(text => text.plain_text).join('');
         prompt += text + '\n\n';
+      } 
+      else if (block.type === 'heading_1' && block.heading_1.rich_text.length > 0) {
+        const text = block.heading_1.rich_text.map(text => text.plain_text).join('');
+        prompt += '# ' + text + '\n\n';
       }
-      else if (block.type.startsWith('heading') && block[block.type].rich_text.length > 0) {
-        const text = block[block.type].rich_text.map(text => text.plain_text).join('');
-        prompt += (block.type === 'heading_1' ? '# ' : block.type === 'heading_2' ? '## ' : '### ') + text + '\n\n';
+      else if (block.type === 'heading_2' && block.heading_2.rich_text.length > 0) {
+        const text = block.heading_2.rich_text.map(text => text.plain_text).join('');
+        prompt += '## ' + text + '\n\n';
+      }
+      else if (block.type === 'heading_3' && block.heading_3.rich_text.length > 0) {
+        const text = block.heading_3.rich_text.map(text => text.plain_text).join('');
+        prompt += '### ' + text + '\n\n';
       }
       else if (block.type === 'bulleted_list_item' && block.bulleted_list_item.rich_text.length > 0) {
         const text = block.bulleted_list_item.rich_text.map(text => text.plain_text).join('');
-        prompt += '• ' + text + '\n';
+        prompt += '- ' + text + '\n';
       }
       else if (block.type === 'numbered_list_item' && block.numbered_list_item.rich_text.length > 0) {
         const text = block.numbered_list_item.rich_text.map(text => text.plain_text).join('');
         prompt += '1. ' + text + '\n';
+      }
+      else if (block.type === 'quote' && block.quote.rich_text.length > 0) {
+        const text = block.quote.rich_text.map(text => text.plain_text).join('');
+        prompt += '> ' + text + '\n\n';
       }
       else if (block.type === 'code' && block.code.rich_text.length > 0) {
         const text = block.code.rich_text.map(text => text.plain_text).join('');
@@ -311,436 +334,159 @@ async function getPromptFromNotion() {
       }
     }
 
-    const finalPrompt = prompt.trim();
-    
-    if (!finalPrompt) {
-      console.log('⚠️ Prompt page appears to be empty, using simplified fallback');
-      return getSimplifiedPromptWithCTA();
+    if (!prompt.trim()) {
+      console.log('⚠️ Notion prompt page was empty, using default prompt');
+      return getDefaultPrompt();
     }
 
-    console.log(`✅ Successfully extracted ${finalPrompt.length} characters from Notion prompt page`);
-    console.log(`📝 Prompt preview: ${finalPrompt.substring(0, 200)}...`);
-    
-    return finalPrompt;
+    console.log(`✅ Successfully loaded ${prompt.length} characters of prompt from Notion`);
+    return prompt.trim();
 
   } catch (error) {
     console.error('❌ Error fetching prompt from Notion:', error);
-    console.log('🔄 Falling back to simplified prompt');
-    return getSimplifiedPromptWithCTA();
+    console.log('ℹ️ Falling back to default prompt');
+    return getDefaultPrompt();
   }
 }
 
-// Enhanced fallback prompt with CTA guidelines
-function getSimplifiedPromptWithCTA() {
-  return `You are a content extraction specialist for the 2 Hour Man brand. Transform content into high-quality tweets.
+// Fallback prompt if Notion page unavailable
+function getDefaultPrompt() {
+  return `You are a content extraction specialist for the 2 Hour Man brand. Transform the provided content into 5 high-quality tweet concepts following these requirements:
 
-For each tweet, ensure:
+1. Each tweet must be under 500 characters
+2. If content exceeds 500 characters, split into multiple posts
+3. Include What-Why-Where cycle analysis (internal use only)
+4. Generate one CTA tweet per concept
+5. Focus on actionable insights from the source content
 
-1. SINGLE AHA MOMENT: One clear insight that everything builds toward
-2. WHAT-WHY-WHERE CYCLES:
-   - WHAT: Define the concept clearly (no jargon without explanation)
-   - WHY: Show why it matters (mechanism, not just naming)
-   - WHERE: Give clear direction on what to do
-
-3. CORE PRINCIPLES:
-   - Explain mechanisms, don't just name them
-   - Use actual concepts from source content
-   - No formulaic markers ("Result:", "Key takeaway:", etc.)
-   - Natural, conversational flow
-
-4. CTA REQUIREMENTS:
-   - Must be UNIQUE to the specific content just written
-   - Must reference the exact concept/aha moment from the tweet
-   - Must promise only what's actually in the source content
-   - Must end with the newsletter link - NO TEXT AFTER THE LINK
-   - Bridge naturally from the specific insight provided
-
-Create 3-5 tweet concepts. For each, provide complete structure including CTA.`;
+Output must be valid JSON with this structure:
+{
+  "tweetConcepts": [
+    {
+      "number": 1,
+      "title": "Brief Description",
+      "mainContent": {
+        "posts": ["Tweet content under 500 chars"],
+        "characterCounts": ["X/500 ✅"]
+      },
+      "ahamoment": "Key insight",
+      "cta": "CTA tweet under 500 chars",
+      "qualityValidation": "Brief validation"
+    }
+  ]
+}`;
 }
 
-// CORRECTED: Generate tweets respecting the original 2HourMan methodology
+// Generate tweets with Claude using the 2HourMan methodology
 async function generateTweetsWithFullStructure(emailContent, prompt) {
   try {
-    console.log('\n🔍 USING 2HOURMAN PROMPT FROM NOTION:');
-    console.log('Original prompt length:', prompt.length);
-    console.log('Prompt preview:', prompt.substring(0, 300) + '...');
-
-    // MINIMAL ADDITION: Only add technical output format requirements
-    // DO NOT override the 2HourMan methodology
+    console.log('🤖 Calling Claude API with 2HourMan methodology...');
+    
+    // Add technical formatting requirements while respecting the 2HourMan methodology
     const technicalFormatting = `
-
 === TECHNICAL OUTPUT FORMAT ONLY ===
 Please follow your 2HourMan methodology exactly as written above.
 
-For the output format, please structure each tweet concept as:
+CRITICAL: Your response must be ONLY valid JSON in this exact format (no other text):
 
-TWEET #1: [Your title]
+{
+  "tweetConcepts": [
+    {
+      "number": 1,
+      "title": "[Brief Description]",
+      "mainContent": {
+        "posts": [
+          "[Post 1 content - under 500 characters]",
+          "[Post 2 content - under 500 characters if needed]",
+          "[Post 3 content - under 500 characters if needed]"
+        ],
+        "characterCounts": [
+          "[X]/500 ✅ or ❌",
+          "[X]/500 ✅ or ❌", 
+          "[X]/500 ✅ or ❌"
+        ]
+      },
+      "ahamoment": "[Core insight]",
+      "cta": "[CTA tweet under 500 characters with newsletter link placeholder]",
+      "qualityValidation": "[Brief validation summary]"
+    }
+  ]
+}
 
-Main Content:
-[Your tweet content following 2HourMan methodology]
+REQUIREMENTS:
+- Generate exactly 5 tweet concepts
+- Each individual post must be under 500 characters
+- Include accurate character counts with ✅ or ❌
+- CTA must be under 500 characters
+- Valid JSON syntax only
+- If any content exceeds 500 characters, split into multiple posts with proper flow
+`;
 
-Single Aha Moment:
-[Your aha moment analysis]
-
-What-Why-Where Cycle Check:
-✅ WHAT: [Your what analysis]
-✅ WHY: [Your why analysis] 
-✅ WHERE: [Your where analysis]
-
-Character Counts:
-- Post 1: [X]/500 ✅
-
-CTA Tweet:
-[Your CTA ending with: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}]
-
----
-
-(Repeat for each concept)
-
-=== END TECHNICAL FORMAT ===
-
-SOURCE CONTENT TO ANALYZE:
-${emailContent}
-
-Please apply your 2HourMan methodology to this content.`;
-
-    const fullRequest = prompt + technicalFormatting;
-
-    console.log('\n📤 SENDING REQUEST WITH 2HOURMAN METHODOLOGY:');
-    console.log('Total request length:', fullRequest.length);
-
+    const fullPrompt = `${prompt}\n\n${technicalFormatting}\n\nContent to transform:\n\n${emailContent}`;
+    
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME,
-      max_tokens: 8000,
-      messages: [{ role: 'user', content: fullRequest }]
-    });
-
-    const content = response.content[0].text;
-    
-    console.log('\n📥 CLAUDE RESPONSE FOLLOWING 2HOURMAN METHOD:');
-    console.log('Response length:', content.length);
-    console.log('First 500 characters:', content.substring(0, 500));
-    
-    // Parse using the original parsing logic (don't override)
-    const tweetConcepts = parseFullStructuredResponse(content);
-    
-    // Only fix newsletter links - don't change the content Claude created
-    tweetConcepts.forEach((concept, index) => {
-      concept.cta = ensureNewsletterLinkInCTA(concept.cta);
-      console.log(`✅ Concept ${index + 1} processed with 2HourMan methodology`);
-      console.log(`   Title: ${concept.title}`);
-      console.log(`   Tweet length: ${concept.mainContent.posts[0]?.length || 0} characters`);
-    });
-    
-    console.log(`✅ Generated ${tweetConcepts.length} concepts using 2HourMan methodology`);
-    
-    return { tweetConcepts };
-
-  } catch (error) {
-    console.error('❌ Error generating tweets with 2HourMan methodology:', error);
-    
-    // Even fallback should follow 2HourMan principles
-    return {
-      tweetConcepts: [{
-        number: 1,
-        title: 'Methodology Error',
-        mainContent: {
-          posts: ['Error applying 2HourMan methodology. Please check logs and retry with proper prompt structure.'],
-          characterCounts: [0]
-        },
-        ahamoment: 'System error preventing proper methodology application',
-        whatWhyWhere: {
-          what: 'Technical error in prompt processing',
-          why: 'System unable to follow 2HourMan methodology',
-          where: 'Review prompt structure and retry automation'
-        },
-        cta: `Technical error occurred. Get reliable automation insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-        qualityValidation: 'Error - 2HourMan methodology not applied'
-      }]
-    };
-  }
-}
-
-// Helper function to ensure newsletter link is properly included in CTA
-function ensureNewsletterLinkInCTA(cta) {
-  try {
-    const newsletterLink = process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/';
-    
-    // Check if the CTA already has a proper link at the end
-    if (cta.endsWith(newsletterLink)) {
-      console.log('✅ CTA already has correct newsletter link at end');
-      return cta;
-    }
-    
-    // Check if CTA has any link placeholder that needs to be replaced
-    if (cta.includes('[NEWSLETTER_LINK]')) {
-      const updatedCTA = cta.replace('[NEWSLETTER_LINK]', newsletterLink);
-      console.log('✅ Replaced [NEWSLETTER_LINK] placeholder with actual link');
-      return updatedCTA;
-    }
-    
-    if (cta.includes('[link]')) {
-      const updatedCTA = cta.replace('[link]', newsletterLink);
-      console.log('✅ Replaced [link] placeholder with newsletter link');
-      return updatedCTA;
-    }
-    
-    // If no link found, append it properly
-    if (!cta.includes('http')) {
-      // Remove any trailing punctuation and add the link
-      const cleanCTA = cta.replace(/[.!?]*$/, '');
-      const finalCTA = `${cleanCTA}: ${newsletterLink}`;
-      console.log('✅ Added newsletter link to CTA that was missing it');
-      return finalCTA;
-    }
-    
-    // If it has some other link, replace with newsletter link
-    const linkPattern = /(https?:\/\/[^\s]+)/g;
-    if (cta.match(linkPattern)) {
-      const updatedCTA = cta.replace(linkPattern, newsletterLink);
-      console.log('✅ Replaced existing link with newsletter link');
-      return updatedCTA;
-    }
-    
-    return cta;
-    
-  } catch (error) {
-    console.error('❌ Error processing CTA link:', error);
-    // Fallback: append newsletter link
-    return `${cta}\n\nGet more insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`;
-  }
-}
-
-// Parse full structured response (original function - no changes)
-function parseFullStructuredResponse(content) {
-  const tweetConcepts = [];
-  
-  try {
-    console.log('\n🔍 PARSING STRUCTURED RESPONSE:');
-    
-    // Look for "TWEET #X:" pattern to identify concepts
-    const conceptMatches = content.match(/TWEET\s*#\d+:[\s\S]*?(?=TWEET\s*#\d+:|$)/gi);
-    
-    if (conceptMatches && conceptMatches.length > 0) {
-      console.log(`✅ Found ${conceptMatches.length} tweet concepts`);
-      
-      conceptMatches.forEach((match, index) => {
-        try {
-          const conceptNum = index + 1;
-          console.log(`\n📋 Parsing concept ${conceptNum}...`);
-          
-          // Extract title/description
-          const titleMatch = match.match(/TWEET\s*#\d+:\s*([^\n]+)/i);
-          const title = titleMatch ? titleMatch[1].trim() : `Tweet Concept ${conceptNum}`;
-          
-          // Extract main content (could be multiple posts)
-          const mainContentMatch = match.match(/Main Content:\s*([\s\S]*?)(?=\n\nSingle Aha Moment:|Single Aha Moment:|$)/i);
-          const mainContentText = mainContentMatch ? mainContentMatch[1].trim() : 'Content extraction failed';
-          
-          // Parse main content for multiple posts
-          const posts = parseMainContentPosts(mainContentText);
-          
-          // Extract aha moment
-          const ahaMatch = match.match(/Single Aha Moment:\s*([\s\S]*?)(?=\n\nWhat-Why-Where|What-Why-Where|$)/i);
-          const ahamoment = ahaMatch ? ahaMatch[1].trim() : 'Aha moment not identified';
-          
-          // Extract What-Why-Where analysis
-          const whatWhyWhereMatch = match.match(/What-Why-Where Check:\s*([\s\S]*?)(?=\n\nCharacter Count|Character Count|$)/i);
-          const whatWhyWhere = parseWhatWhyWhere(whatWhyWhereMatch ? whatWhyWhereMatch[1] : '');
-          
-          // Extract character counts
-          const charCountMatch = match.match(/Character Count[s]?:\s*([\s\S]*?)(?=\n\n---|CTA Tweet:|$)/i);
-          const characterCounts = parseCharacterCounts(charCountMatch ? charCountMatch[1] : '', posts.length);
-          
-          // Extract CTA tweet
-          const ctaMatch = match.match(/CTA Tweet:\s*([\s\S]*?)(?=\n\nCTA Uniqueness|CTA Uniqueness|Character Count|Quality Validation|$)/i);
-          let cta = ctaMatch ? ctaMatch[1].trim() : 'CTA not found';
-          
-          // Clean up CTA (remove extra formatting, ensure single line)
-          cta = cta.replace(/\n+/g, ' ').trim();
-          
-          console.log(`📝 Extracted CTA: ${cta.substring(0, 100)}...`);
-          
-          // Extract quality validation
-          const qualityMatch = match.match(/Quality Validation:\s*([\s\S]*?)(?=\n\n|$)/i);
-          const qualityValidation = qualityMatch ? qualityMatch[1].trim() : 'Quality validation not found';
-          
-          const concept = {
-            number: conceptNum,
-            title: title,
-            mainContent: {
-              posts: posts,
-              characterCounts: characterCounts
-            },
-            ahamoment: ahamoment,
-            whatWhyWhere: whatWhyWhere,
-            cta: cta,
-            qualityValidation: qualityValidation
-          };
-          
-          tweetConcepts.push(concept);
-          console.log(`✅ Successfully parsed concept ${conceptNum}: "${title}"`);
-          
-        } catch (parseError) {
-          console.error(`❌ Error parsing concept ${index + 1}:`, parseError);
-          
-          // Add error concept with fallback CTA
-          tweetConcepts.push({
-            number: index + 1,
-            title: `Concept ${index + 1} - Parse Error`,
-            mainContent: {
-              posts: ['Failed to parse this concept from Claude response'],
-              characterCounts: [0]
-            },
-            ahamoment: 'Parse error occurred',
-            whatWhyWhere: {
-              what: 'Unable to extract analysis',
-              why: 'Parsing failed',
-              where: 'Check logs for details'
-            },
-            cta: `Error parsing content. Get reliable automation insights: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-            qualityValidation: 'Parse error - validation not completed'
-          });
+      max_tokens: 4000,
+      temperature: 0.7,
+      messages: [
+        {
+          role: 'user',
+          content: fullPrompt
         }
-      });
-    } else {
-      console.log('⚠️ No structured concepts found, creating fallback...');
-      
-      // Fallback: treat entire response as one concept
-      tweetConcepts.push({
-        number: 1,
-        title: 'Fallback Concept',
-        mainContent: {
-          posts: [content.substring(0, 500).trim()],
-          characterCounts: [content.substring(0, 500).length]
-        },
-        ahamoment: 'Unable to identify specific aha moment from response',
-        whatWhyWhere: {
-          what: 'Content analysis incomplete',
-          why: 'Response format not recognized',
-          where: 'Review Claude response structure'
-        },
-        cta: `Get proven systems for business efficiency: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-        qualityValidation: 'Fallback concept - manual review needed'
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Complete parsing failure:', error);
-    
-    // Final fallback with working CTA
-    tweetConcepts.push({
-      number: 1,
-      title: 'Parse Error',
-      mainContent: {
-        posts: ['Complete parsing failure occurred'],
-        characterCounts: [0]
-      },
-      ahamoment: 'Parse error occurred',
-      whatWhyWhere: {
-        what: 'Parsing system failed',
-        why: 'Unexpected response format',
-        where: 'Check system logs'
-      },
-      cta: `System error occurred. Get reliable automation content: ${process.env.NEWSLETTER_LINK || 'https://go.thepeakperformer.io/'}`,
-      qualityValidation: 'Error - validation not completed'
+      ]
     });
-  }
-  
-  console.log(`📊 Final parsing result: ${tweetConcepts.length} concepts created`);
-  return tweetConcepts;
-}
 
-// Helper function to parse main content posts (handles splits)
-function parseMainContentPosts(contentText) {
-  try {
-    const postMatches = contentText.match(/Post\s+\d+:\s*([\s\S]*?)(?=Post\s+\d+:|$)/gi);
+    console.log('✅ Claude API call completed');
     
-    if (postMatches && postMatches.length > 1) {
-      return postMatches.map(match => {
-        const postContent = match.replace(/Post\s+\d+:\s*/i, '').trim();
-        return postContent;
+    const responseText = response.content[0].text;
+    console.log(`📝 Raw response length: ${responseText.length} characters`);
+
+    try {
+      const parsedResponse = JSON.parse(responseText);
+      console.log(`✅ Successfully parsed JSON response`);
+      console.log(`📊 Generated ${parsedResponse.tweetConcepts.length} tweet concepts`);
+      
+      // Validate structure
+      if (!parsedResponse.tweetConcepts || !Array.isArray(parsedResponse.tweetConcepts)) {
+        throw new Error('Invalid JSON structure: missing tweetConcepts array');
+      }
+      
+      // Log concept details
+      parsedResponse.tweetConcepts.forEach((concept, index) => {
+        console.log(`\n🔍 Concept ${index + 1}:`);
+        console.log(`   Title: ${concept.title}`);
+        console.log(`   Posts: ${concept.mainContent.posts.length}`);
+        console.log(`   CTA length: ${concept.cta.length} characters`);
       });
-    } else {
-      return [contentText];
+      
+      return parsedResponse;
+      
+    } catch (parseError) {
+      console.error('❌ Failed to parse Claude response as JSON:', parseError);
+      console.log('📝 Raw response for debugging:', responseText.substring(0, 500) + '...');
+      throw new Error(`Invalid JSON response from Claude: ${parseError.message}`);
     }
+
   } catch (error) {
-    console.error('Error parsing main content posts:', error);
-    return [contentText];
+    console.error('❌ Error generating tweets with Claude:', error);
+    throw new Error(`Failed to generate tweets: ${error.message}`);
   }
 }
 
-// Helper function to parse What-Why-Where analysis
-function parseWhatWhyWhere(analysisText) {
-  try {
-    const whatMatch = analysisText.match(/✅\s*WHAT:\s*([^\n]+)/i);
-    const whyMatch = analysisText.match(/✅\s*WHY:\s*([^\n]+)/i);
-    const whereMatch = analysisText.match(/✅\s*WHERE:\s*([^\n]+)/i);
-    
-    return {
-      what: whatMatch ? whatMatch[1].trim() : 'WHAT analysis not found',
-      why: whyMatch ? whyMatch[1].trim() : 'WHY analysis not found',
-      where: whereMatch ? whereMatch[1].trim() : 'WHERE analysis not found'
-    };
-  } catch (error) {
-    console.error('Error parsing What-Why-Where:', error);
-    return {
-      what: 'Analysis parsing failed',
-      why: 'Analysis parsing failed',
-      where: 'Analysis parsing failed'
-    };
-  }
-}
-
-// Helper function to parse character counts
-function parseCharacterCounts(countText, expectedPosts) {
-  try {
-    const countMatches = countText.match(/(\d+)\/500/g);
-    
-    if (countMatches && countMatches.length > 0) {
-      return countMatches.map(match => {
-        const count = match.match(/(\d+)/)[1];
-        return parseInt(count);
-      });
-    } else {
-      return Array(expectedPosts).fill(0);
-    }
-  } catch (error) {
-    console.error('Error parsing character counts:', error);
-    return Array(expectedPosts).fill(0);
-  }
-}
-
-// Create pages following the complete 2HourMan structure
+// Create full structure pages in Notion with proper splitting and dividers
 async function createFullStructurePages(tweetsData, emailPageId) {
   try {
+    console.log(`\n📝 Creating ${tweetsData.tweetConcepts.length} full structure pages...`);
+    
     const results = [];
-
-    console.log('\n📝 CREATING FULL STRUCTURE PAGES:');
-    console.log(`Processing ${tweetsData.tweetConcepts.length} tweet concepts...`);
 
     for (let i = 0; i < tweetsData.tweetConcepts.length; i++) {
       const concept = tweetsData.tweetConcepts[i];
+      console.log(`\n🔨 Creating page ${i + 1}/${tweetsData.tweetConcepts.length}`);
+      console.log(`   Concept: ${concept.title}`);
+      console.log(`   Posts: ${concept.mainContent.posts.length}`);
       
-      console.log(`\n🧵 CREATING PAGE FOR CONCEPT ${i + 1}:`);
-      console.log(`Title: ${concept.title}`);
-      console.log(`Posts: ${concept.mainContent.posts.length}`);
-      console.log(`CTA: ${concept.cta.substring(0, 50)}...`);
-
-      // Create blocks following the exact 2HourMan format
       const blocks = [];
-      
-      // TWEET #X: Title
-      blocks.push({
-        object: 'block',
-        type: 'heading_1',
-        heading_1: {
-          rich_text: [{
-            type: 'text',
-            text: { content: `TWEET #${concept.number}: ${concept.title}` }
-          }]
-        }
-      });
       
       // Main Content section
       blocks.push({
@@ -754,54 +500,52 @@ async function createFullStructurePages(tweetsData, emailPageId) {
         }
       });
       
-      // Add each post
+      // Add each post with character count and dividers
       concept.mainContent.posts.forEach((post, postIndex) => {
-        if (concept.mainContent.posts.length > 1) {
-          // Multiple posts - add post header
-          blocks.push({
-            object: 'block',
-            type: 'heading_3',
-            heading_3: {
-              rich_text: [{
-                type: 'text',
-                text: { content: `Post ${postIndex + 1}:` }
-              }]
-            }
-          });
-        }
-        
-        // Post content
+        // Add the post content
         blocks.push({
           object: 'block',
           type: 'paragraph',
           paragraph: {
             rich_text: [{
               type: 'text',
-              text: { content: post },
-              annotations: { bold: true }
+              text: { content: post }
             }]
           }
         });
         
-        // Character count for this post
-        const charCount = concept.mainContent.characterCounts[postIndex] || post.length;
+        // Add character count right after each post
+        const charCount = concept.mainContent.characterCounts[postIndex] || `${post.length}/500 ${post.length <= 500 ? '✅' : '❌'}`;
         blocks.push({
           object: 'block',
           type: 'paragraph',
           paragraph: {
             rich_text: [{
               type: 'text',
-              text: { content: `Character Count: ${charCount}/500 ${charCount <= 500 ? '✅' : '❌'}` }
+              text: { content: `Character Count: ${charCount}` },
+              annotations: { 
+                color: 'gray',
+                italic: true
+              }
             }]
           }
         });
         
-        // Add divider between posts
+        // Add divider between posts (but not after the last one)
         if (postIndex < concept.mainContent.posts.length - 1) {
           blocks.push({
             object: 'block',
-            type: 'divider',
-            divider: {}
+            type: 'paragraph',
+            paragraph: {
+              rich_text: [{
+                type: 'text',
+                text: { content: '---' },
+                annotations: { 
+                  bold: true,
+                  color: 'blue'
+                }
+              }]
+            }
           });
         }
       });
@@ -829,71 +573,8 @@ async function createFullStructurePages(tweetsData, emailPageId) {
         }
       });
       
-      // What-Why-Where Cycle Check section
-      blocks.push({
-        object: 'block',
-        type: 'heading_2',
-        heading_2: {
-          rich_text: [{
-            type: 'text',
-            text: { content: 'What-Why-Where Cycle Check:' }
-          }]
-        }
-      });
-      
-      blocks.push({
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text',
-              text: { content: '✅ WHAT: ' },
-              annotations: { bold: true }
-            },
-            {
-              type: 'text',
-              text: { content: concept.whatWhyWhere.what }
-            }
-          ]
-        }
-      });
-      
-      blocks.push({
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text',
-              text: { content: '✅ WHY: ' },
-              annotations: { bold: true }
-            },
-            {
-              type: 'text',
-              text: { content: concept.whatWhyWhere.why }
-            }
-          ]
-        }
-      });
-      
-      blocks.push({
-        object: 'block',
-        type: 'paragraph',
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text',
-              text: { content: '✅ WHERE: ' },
-              annotations: { bold: true }
-            },
-            {
-              type: 'text',
-              text: { content: concept.whatWhyWhere.where }
-            }
-          ]
-        }
-      });
+      // REMOVED: What-Why-Where Cycle Check section (as requested)
+      // This section has been completely removed from Notion display
       
       // Divider before CTA
       blocks.push({
@@ -925,13 +606,19 @@ async function createFullStructurePages(tweetsData, emailPageId) {
         }
       });
       
+      // CTA Character count with validation
+      const ctaLength = concept.cta.length;
       blocks.push({
         object: 'block',
         type: 'paragraph',
         paragraph: {
           rich_text: [{
             type: 'text',
-            text: { content: `CTA Character Count: ${concept.cta.length}/500 ${concept.cta.length <= 500 ? '✅' : '❌'}` }
+            text: { content: `CTA Character Count: ${ctaLength}/500 ${ctaLength <= 500 ? '✅' : '❌'}` },
+            annotations: { 
+              color: ctaLength <= 500 ? 'green' : 'red',
+              italic: true
+            }
           }]
         }
       });
@@ -980,7 +667,7 @@ async function createFullStructurePages(tweetsData, emailPageId) {
           children: blocks
         });
 
-        console.log(`✅ Successfully created full structure page ${i + 1}: ${response.id}`);
+        console.log(`✅ Successfully created page ${i + 1}: ${response.id}`);
         console.log(`   Title: TWEET #${concept.number}: ${concept.title}`);
         console.log(`   Blocks added: ${blocks.length}`);
         console.log(`   Posts: ${concept.mainContent.posts.length}`);
@@ -1016,7 +703,7 @@ async function createFullStructurePages(tweetsData, emailPageId) {
               paragraph: {
                 rich_text: [{
                   type: 'text',
-                  text: { content: `Error creating full structure page for concept ${i + 1}. Check logs for details.\n\nOriginal content:\n${concept.mainContent.posts.join('\n\n')}\n\nCTA: ${concept.cta}` }
+                  text: { content: `Error creating page for concept ${i + 1}. Check logs for details.` }
                 }]
               }
             }]
@@ -1033,7 +720,7 @@ async function createFullStructurePages(tweetsData, emailPageId) {
       }
     }
 
-    console.log(`\n✅ COMPLETED: Created ${results.length} full structure pages`);
+    console.log(`\n✅ COMPLETED: Created ${results.length} pages with proper structure`);
     return results;
 
   } catch (error) {
@@ -1050,7 +737,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 11.4 - Respecting 2HourMan Methodology`);
+  console.log(`🔧 Version: 12.0 - Proper Tweet Splitting with Dividers`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
 });
