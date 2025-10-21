@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '13.0 - Enhanced API Quality (Solutions A+I)',
+    version: '13.1 - API Fixed (Solutions A+I)',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -377,16 +377,13 @@ Output must be valid JSON with this structure:
 }`;
 }
 
-// SOLUTION A + I: Enhanced API call with better message architecture and interactive simulation
+// SOLUTION A + I: Enhanced API call with CORRECTED system parameter structure
 async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
   try {
     console.log('🤖 Calling Claude API with enhanced quality approach (Solutions A+I)...');
     
-    // SOLUTION A: Message Architecture - Separate system/assistant roles for better processing
-    const messages = [
-      {
-        role: 'system',
-        content: `You are an expert content strategist and copywriter specializing in high-converting social media content. You have deep expertise in psychological triggers, audience psychology, and content that drives real engagement and conversions. Your writing is strategic, insightful, and creates genuine value for readers.
+    // SOLUTION A: System message as top-level parameter (CORRECTED FORMAT)
+    const systemMessage = `You are an expert content strategist and copywriter specializing in high-converting social media content. You have deep expertise in psychological triggers, audience psychology, and content that drives real engagement and conversions. Your writing is strategic, insightful, and creates genuine value for readers.
 
 You excel at:
 - Extracting core insights from long-form content
@@ -394,8 +391,10 @@ You excel at:
 - Building compelling narratives that drive action
 - Crafting CTAs that create genuine curiosity gaps
 - Using specific examples and concrete details
-- Explaining mechanisms, not just naming concepts`
-      },
+- Explaining mechanisms, not just naming concepts`;
+
+    // SOLUTION I: Interactive conversation flow
+    const messages = [
       {
         role: 'user',
         content: prompt
@@ -418,12 +417,14 @@ Please create 5 high-quality tweet concepts following the complete methodology. 
       }
     ];
 
+    // CORRECTED API CALL: system as top-level parameter, NOT in messages array
     const response = await anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME,
       max_tokens: 6000, // Increased for more detailed responses
       temperature: 0.85, // Higher creativity for better content
       top_p: 0.9, // Better sampling
-      messages: messages
+      system: systemMessage, // ✅ CORRECT - system as top-level parameter
+      messages: messages // ✅ CORRECT - no system role in messages array
     });
 
     console.log('✅ Claude API call completed');
@@ -784,7 +785,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 13.0 - Enhanced API Quality (Solutions A+I)`);
+  console.log(`🔧 Version: 13.1 - API Fixed (Solutions A+I)`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
 });
