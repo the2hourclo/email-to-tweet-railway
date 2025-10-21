@@ -50,7 +50,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '12.0 - Proper Tweet Splitting with Dividers',
+    version: '12.1 - Fixed JSON Parsing + Tweet Splitting',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -377,7 +377,7 @@ Output must be valid JSON with this structure:
 }`;
 }
 
-// Generate tweets with Claude using the 2HourMan methodology
+// Generate tweets with Claude using the 2HourMan methodology - FIXED JSON PARSING
 async function generateTweetsWithFullStructure(emailContent, prompt) {
   try {
     console.log('🤖 Calling Claude API with 2HourMan methodology...');
@@ -387,7 +387,7 @@ async function generateTweetsWithFullStructure(emailContent, prompt) {
 === TECHNICAL OUTPUT FORMAT ONLY ===
 Please follow your 2HourMan methodology exactly as written above.
 
-CRITICAL: Your response must be ONLY valid JSON in this exact format (no other text):
+CRITICAL: Your response must be ONLY valid JSON in this exact format (no other text, no markdown code blocks):
 
 {
   "tweetConcepts": [
@@ -418,7 +418,7 @@ REQUIREMENTS:
 - Each individual post must be under 500 characters
 - Include accurate character counts with ✅ or ❌
 - CTA must be under 500 characters
-- Valid JSON syntax only
+- Valid JSON syntax only - NO markdown code blocks
 - If any content exceeds 500 characters, split into multiple posts with proper flow
 `;
 
@@ -442,7 +442,27 @@ REQUIREMENTS:
     console.log(`📝 Raw response length: ${responseText.length} characters`);
 
     try {
-      const parsedResponse = JSON.parse(responseText);
+      // Strip markdown code blocks if Claude wrapped the JSON
+      let cleanedResponse = responseText.trim();
+      
+      // Remove opening ```json or ``` 
+      if (cleanedResponse.startsWith('```json')) {
+        cleanedResponse = cleanedResponse.substring(7); // Remove ```json
+      } else if (cleanedResponse.startsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(3); // Remove ```
+      }
+      
+      // Remove closing ```
+      if (cleanedResponse.endsWith('```')) {
+        cleanedResponse = cleanedResponse.slice(0, -3); // Remove trailing ```
+      }
+      
+      // Clean up any extra whitespace
+      cleanedResponse = cleanedResponse.trim();
+      
+      console.log(`🧹 Cleaned response length: ${cleanedResponse.length} characters`);
+      
+      const parsedResponse = JSON.parse(cleanedResponse);
       console.log(`✅ Successfully parsed JSON response`);
       console.log(`📊 Generated ${parsedResponse.tweetConcepts.length} tweet concepts`);
       
@@ -464,6 +484,30 @@ REQUIREMENTS:
     } catch (parseError) {
       console.error('❌ Failed to parse Claude response as JSON:', parseError);
       console.log('📝 Raw response for debugging:', responseText.substring(0, 500) + '...');
+      
+      // Try one more cleanup attempt
+      try {
+        // More aggressive cleanup
+        let lastAttempt = responseText
+          .replace(/```json/g, '')
+          .replace(/```/g, '')
+          .trim();
+        
+        // Find the first { and last }
+        const firstBrace = lastAttempt.indexOf('{');
+        const lastBrace = lastAttempt.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          lastAttempt = lastAttempt.substring(firstBrace, lastBrace + 1);
+          console.log(`🔧 Attempting aggressive cleanup...`);
+          const finalParsed = JSON.parse(lastAttempt);
+          console.log(`✅ Aggressive cleanup successful!`);
+          return finalParsed;
+        }
+      } catch (finalError) {
+        console.error('❌ Final cleanup attempt failed:', finalError);
+      }
+      
       throw new Error(`Invalid JSON response from Claude: ${parseError.message}`);
     }
 
@@ -473,7 +517,7 @@ REQUIREMENTS:
   }
 }
 
-// Create full structure pages in Notion with proper splitting and dividers
+// Create full structure pages in Notion with proper splitting and dividers - REMOVED What-Why-Where display
 async function createFullStructurePages(tweetsData, emailPageId) {
   try {
     console.log(`\n📝 Creating ${tweetsData.tweetConcepts.length} full structure pages...`);
@@ -737,7 +781,7 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 12.0 - Proper Tweet Splitting with Dividers`);
+  console.log(`🔧 Version: 12.1 - Fixed JSON Parsing + Tweet Splitting`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
 });
