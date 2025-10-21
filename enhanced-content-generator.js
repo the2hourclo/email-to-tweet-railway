@@ -9,6 +9,52 @@ class EnhancedContentGenerator {
     this.basePrompt = basePrompt;
   }
 
+  // Robust JSON extraction from Claude responses
+  extractJSON(text) {
+    try {
+      // Try parsing directly first
+      return JSON.parse(text);
+    } catch (e) {
+      console.log('🔍 Direct JSON parse failed, trying extraction methods...');
+      
+      try {
+        // Method 1: Extract from ```json blocks
+        const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonBlockMatch) {
+          console.log('✅ Found JSON in code block');
+          return JSON.parse(jsonBlockMatch[1]);
+        }
+
+        // Method 2: Extract from ```javascript blocks  
+        const jsBlockMatch = text.match(/```javascript\s*([\s\S]*?)\s*```/);
+        if (jsBlockMatch) {
+          console.log('✅ Found JSON in JS code block');
+          return JSON.parse(jsBlockMatch[1]);
+        }
+
+        // Method 3: Find JSON object in text
+        const objectMatch = text.match(/\{[\s\S]*\}/);
+        if (objectMatch) {
+          console.log('✅ Found JSON object in text');
+          return JSON.parse(objectMatch[0]);
+        }
+
+        // Method 4: Look for response after "Response:" or similar
+        const responseMatch = text.match(/(?:Response|Result|Output):\s*(\{[\s\S]*\})/i);
+        if (responseMatch) {
+          console.log('✅ Found JSON after response indicator');
+          return JSON.parse(responseMatch[1]);
+        }
+
+        throw new Error('No valid JSON found in response');
+      } catch (parseError) {
+        console.error('❌ All JSON extraction methods failed');
+        console.error('Raw response:', text.substring(0, 200) + '...');
+        throw new Error(`JSON extraction failed: ${parseError.message}`);
+      }
+    }
+  }
+
   async generateTweetsWithMultiPass(emailContent, newsletterLink) {
     console.log('🎯 Starting Multi-Pass Generation Process...');
     
@@ -56,6 +102,8 @@ class EnhancedContentGenerator {
   // PASS 1: Analyze content for optimal approach
   async analyzeContent(emailContent) {
     const analysisPrompt = `
+CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
+
 Analyze this email content to inform tweet generation strategy:
 
 EMAIL CONTENT:
@@ -74,7 +122,7 @@ Analyze for:
    - Contrarian Take
    - Experience Share
 
-Respond in JSON format:
+Your response must be exactly this JSON format with no additional text:
 {
   "contentType": "",
   "coreTheme": "",
@@ -92,7 +140,7 @@ Respond in JSON format:
     });
 
     try {
-      return JSON.parse(response.content[0].text);
+      return this.extractJSON(response.content[0].text);
     } catch (e) {
       console.log('⚠️ Analysis parsing failed, using defaults');
       return {
@@ -110,6 +158,8 @@ Respond in JSON format:
   // PASS 2: Generate initial draft with analyzed context
   async generateInitialDraft(emailContent, analysis) {
     const enhancedPrompt = `
+CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
+
 CONTENT ANALYSIS CONTEXT:
 - Content Type: ${analysis.contentType}
 - Core Theme: ${analysis.coreTheme}
@@ -125,7 +175,22 @@ ${this.basePrompt}
 EMAIL CONTENT TO TRANSFORM:
 ${emailContent}
 
-Focus on the recommended templates and ensure each tweet captures one of the identified key insights while maintaining the analyzed emotional tone.`;
+Focus on the recommended templates and ensure each tweet captures one of the identified key insights while maintaining the analyzed emotional tone.
+
+Your response must be exactly this JSON format with no additional text:
+{
+  "tweetConcepts": [
+    {
+      "concept": "",
+      "strategy": "",
+      "mainContent": {
+        "posts": [""],
+        "characterCounts": [""]
+      },
+      "cta": ""
+    }
+  ]
+}`;
 
     const response = await this.anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
@@ -134,9 +199,10 @@ Focus on the recommended templates and ensure each tweet captures one of the ide
     });
 
     try {
-      return JSON.parse(response.content[0].text);
+      return this.extractJSON(response.content[0].text);
     } catch (e) {
       console.error('❌ Initial draft JSON parsing failed');
+      console.error('Raw response:', response.content[0].text.substring(0, 300) + '...');
       throw new Error('Failed to generate initial draft');
     }
   }
@@ -144,6 +210,8 @@ Focus on the recommended templates and ensure each tweet captures one of the ide
   // PASS 3: Assess quality and identify specific improvement areas
   async assessQuality(tweetData) {
     const qualityPrompt = `
+CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
+
 Assess these tweets against high-quality standards and identify specific improvement areas:
 
 TWEETS TO ASSESS:
@@ -163,17 +231,21 @@ For each tweet, identify:
 - Specific gaps or weaknesses
 - Concrete improvement suggestions
 
-Respond in JSON:
+Your response must be exactly this JSON format with no additional text:
 {
   "overallQuality": "High/Medium/Low",
-  "needsRefinement": true/false,
+  "needsRefinement": true,
   "feedback": {
     "tweet1": {
       "strengths": [""],
       "weaknesses": [""],
       "improvements": [""]
     },
-    "tweet2": { ... },
+    "tweet2": {
+      "strengths": [""],
+      "weaknesses": [""],
+      "improvements": [""]
+    },
     "globalIssues": [""],
     "priorityFixes": [""]
   }
@@ -186,7 +258,7 @@ Respond in JSON:
     });
 
     try {
-      return JSON.parse(response.content[0].text);
+      return this.extractJSON(response.content[0].text);
     } catch (e) {
       console.log('⚠️ Quality assessment parsing failed, assuming refinement needed');
       return {
@@ -203,6 +275,8 @@ Respond in JSON:
   // PASS 4: Targeted refinement based on quality assessment
   async refineContent(tweetData, qualityFeedback) {
     const refinementPrompt = `
+CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
+
 REFINEMENT TASK:
 Improve these tweets based on specific quality feedback.
 
@@ -227,7 +301,22 @@ Requirements:
 - Keep character limits under 500 per post
 - Maintain authentic conversational tone
 - Ensure each improvement directly addresses feedback
-- Don't change what's already working well`;
+- Don't change what's already working well
+
+Your response must be exactly this JSON format with no additional text:
+{
+  "tweetConcepts": [
+    {
+      "concept": "",
+      "strategy": "",
+      "mainContent": {
+        "posts": [""],
+        "characterCounts": [""]
+      },
+      "cta": ""
+    }
+  ]
+}`;
 
     const response = await this.anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
@@ -236,7 +325,7 @@ Requirements:
     });
 
     try {
-      return JSON.parse(response.content[0].text);
+      return this.extractJSON(response.content[0].text);
     } catch (e) {
       console.log('⚠️ Refinement parsing failed, returning original');
       return tweetData;
@@ -246,6 +335,8 @@ Requirements:
   // PASS 5: Enhance CTAs with specific newsletter link and bridge language
   async enhanceCTAs(tweetData, newsletterLink, analysis) {
     const ctaPrompt = `
+CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
+
 TASK: Enhance CTAs with specific newsletter link and improved bridge language.
 
 CURRENT TWEETS:
@@ -272,7 +363,20 @@ For each tweet, create a CTA that:
 - Positions the newsletter as the logical next step
 - Feels conversational, not salesy
 
-Return the same JSON structure with enhanced CTAs.`;
+Your response must be exactly this JSON format with no additional text:
+{
+  "tweetConcepts": [
+    {
+      "concept": "",
+      "strategy": "",
+      "mainContent": {
+        "posts": [""],
+        "characterCounts": [""]
+      },
+      "cta": ""
+    }
+  ]
+}`;
 
     const response = await this.anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
@@ -281,7 +385,7 @@ Return the same JSON structure with enhanced CTAs.`;
     });
 
     try {
-      return JSON.parse(response.content[0].text);
+      return this.extractJSON(response.content[0].text);
     } catch (e) {
       console.log('⚠️ CTA enhancement parsing failed, returning previous version');
       return tweetData;
@@ -333,19 +437,43 @@ Return the same JSON structure with enhanced CTAs.`;
   async fallbackGeneration(emailContent) {
     console.log('🔄 Using fallback single-pass generation...');
     
+    const fallbackPrompt = `
+CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
+
+${this.basePrompt}
+
+EMAIL CONTENT:
+${emailContent}
+
+Your response must be exactly this JSON format with no additional text:
+{
+  "tweetConcepts": [
+    {
+      "concept": "",
+      "strategy": "",
+      "mainContent": {
+        "posts": [""],
+        "characterCounts": [""]
+      },
+      "cta": ""
+    }
+  ]
+}`;
+    
     const response = await this.anthropic.messages.create({
       model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
       max_tokens: 4000,
       messages: [{ 
         role: 'user', 
-        content: `${this.basePrompt}\n\nEMAIL CONTENT:\n${emailContent}` 
+        content: fallbackPrompt
       }]
     });
 
     try {
-      return JSON.parse(response.content[0].text);
+      return this.extractJSON(response.content[0].text);
     } catch (e) {
       console.error('❌ Even fallback generation failed');
+      console.error('Raw response:', response.content[0].text.substring(0, 300) + '...');
       throw new Error('Complete generation failure');
     }
   }
