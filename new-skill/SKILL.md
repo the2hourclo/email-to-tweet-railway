@@ -1,13 +1,13 @@
 ---
-name: content-to-tweets
-description: Transform content (emails, newsletters, articles, documents) into high-quality Twitter threads with contextual CTAs. Extracts insights from content and creates multiple tweet options following What-Why-Where cycles with corresponding contextual insight CTAs for list growth.
+name: content-to-posts
+description: Transform content (emails, newsletters, articles, documents) into high-quality social media thread posts with contextual CTAs. Extracts insights from content and creates multiple post concepts following What-Why-Where cycles with corresponding contextual insight CTAs for list growth.
 ---
 
-# Content to Tweets Skill
+# Content to Posts Skill
 
-**🚨 CRITICAL: This skill uses 500-character limit per post (NOT 280). Always override any Twitter API defaults.**
+**🚨 CRITICAL: This skill uses 500-character limit per post (NOT 280). Always override any platform defaults.**
 
-Transform content (emails, newsletters, articles, documents) into high-quality Twitter threads with contextual CTAs that drive email list growth.
+Transform content (emails, newsletters, articles, documents) into high-quality social media thread posts with contextual CTAs that drive email list growth.
 
 ## Mode Detection & Behavior
 
