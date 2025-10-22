@@ -31,23 +31,29 @@ async function testSkill() {
 
     console.log('\n🚀 Calling Skills API...\n');
 
-    // Try using skill as a tool
+    // Use Skills API with code execution container (CORRECT APPROACH)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-beta': 'skills-2025-10-02',
+        'anthropic-beta': 'code-execution-2025-08-25,skills-2025-10-02',
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
+        model: 'claude-3-7-sonnet-20250219',
         max_tokens: 4000,
         tools: [{
-          type: "skill",
-          name: "content-to-tweets",
-          skill_id: skillId
+          type: 'code_execution_20250825',
+          name: 'code_execution'
         }],
+        container: {
+          skills: [{
+            type: 'custom',
+            skill_id: skillId,
+            version: 'latest'
+          }]
+        },
         messages: [{
           role: 'user',
           content: sampleContent

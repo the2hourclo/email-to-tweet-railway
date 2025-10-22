@@ -301,34 +301,42 @@ async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
   return result;
 }
 
-// NEW: Generate tweets using the Skills API
+// NEW: Generate tweets using the Skills API with code execution container
 async function generateTweetsWithSkills(emailContent, prompt, skillId) {
   try {
-    console.log('🚀 Calling Skills API...');
+    console.log('🚀 Calling Skills API with code execution container...');
 
-    // Prepare the input for the skill
-    const skillInput = {
-      emailContent: emailContent,
-      prompt: prompt,
-      newsletterLink: process.env.NEWSLETTER_LINK || ''
-    };
+    // Build the user prompt for the skill
+    const userPrompt = `${emailContent}
 
-    // Make the Skills API request using fetch
+Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
+
+    // Make the Skills API request using the container parameter
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-beta': 'skills-2025-10-02',
+        'anthropic-beta': 'code-execution-2025-08-25,skills-2025-10-02',
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
         max_tokens: 4000,
-        skill_id: skillId,
+        tools: [{
+          type: 'code_execution_20250825',
+          name: 'code_execution'
+        }],
+        container: {
+          skills: [{
+            type: 'custom',
+            skill_id: skillId,
+            version: 'latest'
+          }]
+        },
         messages: [{
           role: 'user',
-          content: JSON.stringify(skillInput)
+          content: userPrompt
         }]
       })
     });
@@ -340,13 +348,28 @@ async function generateTweetsWithSkills(emailContent, prompt, skillId) {
 
     const data = await response.json();
     console.log('✅ Skills API response received');
+    console.log(`   Stop reason: ${data.stop_reason}`);
+    console.log(`   Content blocks: ${data.content?.length || 0}`);
 
     // Extract the content from the response
-    if (!data.content || !data.content[0] || !data.content[0].text) {
-      throw new Error('Invalid response format from Skills API');
+    if (!data.content || data.content.length === 0) {
+      throw new Error('No content in Skills API response');
     }
 
-    const resultText = data.content[0].text;
+    // Skills may return multiple content blocks (text + tool use results)
+    let resultText = '';
+    for (const block of data.content) {
+      if (block.type === 'text') {
+        resultText += block.text;
+      }
+    }
+
+    if (!resultText) {
+      throw new Error('No text content in Skills API response');
+    }
+
+    console.log('📝 Raw skill output:');
+    console.log(resultText.substring(0, 500) + '...');
 
     // Parse the JSON response
     try {
