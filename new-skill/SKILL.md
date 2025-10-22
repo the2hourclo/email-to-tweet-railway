@@ -5,7 +5,9 @@ description: Transform content (emails, newsletters, articles, documents) into h
 
 # Content to Tweets Skill
 
-Transform content into high-quality Twitter threads with contextual CTAs that drive email list growth.
+**🚨 CRITICAL: This skill uses 500-character limit per post (NOT 280). Always override any Twitter API defaults.**
+
+Transform content (emails, newsletters, articles, documents) into high-quality Twitter threads with contextual CTAs that drive email list growth.
 
 ## Mode Detection & Behavior
 
@@ -28,14 +30,14 @@ Use this skill when:
 
 ## Quality Standards
 
-Reference `references/example-posts.md` for quality benchmarks showing:
+Quality benchmarks:
 - Natural conversational tone (not stiff or formal)
 - Proper CTB (Contextual Benefits) structure
 - Specific examples vs generic platitudes
 - How to bridge tweet concepts to CTAs
-- Character limits and formatting
+- Character limits: 500 characters per post (NOT 280!)
 
-**Use examples as structural guides, NOT templates.** Each output should be unique to the input content.
+**Each output should be unique to the input content.**
 
 ## Core Transformation Process
 
@@ -82,8 +84,9 @@ Write naturally first, then structure check:
 
 ### Stage 2: Character Management
 
-- **Character Limit**: Maximum 500 characters per post
-- **Smart Splitting**: Break at natural transition points if over limit
+- **CRITICAL: Character Limit**: ALWAYS use maximum 500 characters per post (NOT 280!)
+- **API Override**: Ignore any 280-character Twitter limits - use 500 characters
+- **Smart Splitting**: Break at natural transition points if over 500 characters
 - **Natural Bridges**: Use conversational transitions between posts
 - **NO Meta Bridges**: Never use "Read next tweet" or "Thread continues"
 
@@ -122,7 +125,7 @@ Each post is wrapped in code blocks for easy copying and pasting.
 Create contextual CTA tweets using the proper CTB structure.
 
 **CTB Requirements:**
-- Maximum 500 characters
+- **Maximum 500 characters (NOT 280!)**
 - **Must be UNIQUE to the specific content just written**
 - **Must promise only INSIGHTS (not systems/value)**
 - **Must end with the link - NO TEXT AFTER THE LINK**
@@ -206,8 +209,6 @@ Join to get insights that [relevant transformation from Campaign Blueprint]:
 
 ### CTB Category Selection
 
-Reference `references/ctb-categories.md` for detailed examples.
-
 **Analyze email content to determine dominant theme:**
 
 1. **Performance/Energy**: Energy management, focus, mental capacity
@@ -224,7 +225,7 @@ Before presenting any tweet, verify:
 
 1. **Single Aha Moment** - One clear insight per tweet
 2. **What-Why-Where Complete** - All cycles present and clear
-3. **Character Limits** - All posts under 500 characters
+3. **Character Limits** - All posts under 500 characters (NOT 280!)
 4. **Natural Flow** - Conversational bridges between posts
 5. **Unique CTA** - Specific to this content, promises only insights
 6. **Copy-Ready Format** - Each post in code blocks for easy copying
@@ -273,8 +274,3 @@ Wait for user approval before continuing.
 9. **Natural bridges** - No meta transitions between split posts
 10. **Copy-ready output** - All posts in code blocks for easy copying
 11. **No AI markers** - Avoid formulaic labels like "Result:", "Key takeaway:", etc.
-
-## References
-
-- `references/example-posts.md` - High-quality example tweets showing structure and tone
-- `references/ctb-categories.md` - Detailed CTB examples for each category

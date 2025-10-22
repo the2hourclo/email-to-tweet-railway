@@ -6,24 +6,12 @@ This directory contains everything you need to create your new content-to-tweets
 
 ### Core Skill File
 - **SKILL.md** - The main skill instructions with:
+  - **🚨 CRITICAL: 500-character limit per post (NOT 280!)**
   - Automatic API vs Chat mode detection
   - Quality standards and validation
   - Complete CTB framework
   - Proper output formatting (## TWEET #N:)
   - No need for system prompt overrides
-
-### Reference Files
-- **references/example-posts.md** - High-quality example tweets showing:
-  - Natural conversational tone
-  - Proper What-Why-Where structure
-  - Contextual CTB examples
-  - Key patterns and what to avoid
-
-- **references/ctb-categories.md** - Detailed CTB framework with:
-  - 5 category types with examples
-  - How to select the right category
-  - Common mistakes to avoid
-  - Perfect CTB checklist
 
 ## How to Create the New Skill
 
@@ -36,10 +24,7 @@ This directory contains everything you need to create your new content-to-tweets
 1. Click "Create New Skill"
 2. Choose "Custom Skill"
 3. Set skill name: `content-to-tweets`
-4. Upload all files from this `new-skill` directory:
-   - `SKILL.md` (main instructions)
-   - `references/example-posts.md`
-   - `references/ctb-categories.md`
+4. Upload the `SKILL.md` file from this `new-skill` directory
 
 ### Step 3: Get New Skill ID
 1. After creation, copy the new skill ID (will be something like `skill_01XXXXXXXXXX`)
@@ -62,11 +47,11 @@ The skill now automatically detects whether it's being called via API (non-inter
 
 **No system prompt override needed** - the skill handles this internally.
 
-### 2. Quality References
-The skill references example files to maintain quality:
-- Uses `references/example-posts.md` for structural guidance
-- Uses `references/ctb-categories.md` for CTA selection
-- Emphasizes "use as guide, not template"
+### 2. 500-Character Limit Enforcement
+**🚨 CRITICAL: This skill uses 500-character limit per post (NOT 280!)**
+- Multiple emphatic reminders throughout SKILL.md
+- "API Override" instruction to ignore 280-character Twitter defaults
+- Quality validation checks enforce 500-character max
 
 ### 3. Proper Output Format
 Ensures consistent markdown format that your parser expects:
@@ -144,9 +129,9 @@ Expected output: 5-10 complete tweet concepts in proper format
 **Cause**: Skill might be in chat mode
 **Fix**: Verify skill file has proper API mode detection (should be in SKILL.md)
 
-### Issue: Quality doesn't match demo
-**Cause**: Reference files not uploaded or not being used
-**Fix**: Ensure `references/example-posts.md` is uploaded with skill
+### Issue: Posts are cut off at 280 characters
+**Cause**: Skill defaulting to Twitter's 280-character limit
+**Fix**: Verify SKILL.md has "NOT 280!" emphasis throughout - should use 500-character max
 
 ### Issue: Parser finds 0 concepts
 **Cause**: Output format mismatch
@@ -162,24 +147,25 @@ Expected output: 5-10 complete tweet concepts in proper format
 - ❌ System prompt override in index.js
 - ❌ Conversational pauses in API mode
 - ❌ Generic quality instructions
+- ❌ Reference files (poor quality examples removed)
 
 ### Added:
+- ✅ **🚨 CRITICAL: 500-character limit (NOT 280!) emphasized throughout**
 - ✅ Automatic mode detection
-- ✅ Quality reference files
+- ✅ API Override instructions to ignore Twitter 280-character defaults
 - ✅ Detailed CTB framework
 - ✅ Built-in validation
-- ✅ Better examples and patterns
 
 ## Next Steps After Skill Creation
 
-1. **Create the new skill** in Anthropic Console with these files
+1. **Create the new skill** in Anthropic Console with SKILL.md
 2. **Copy the new skill ID**
 3. **Update Railway environment** variable
 4. **Test with sample content** using test-with-content.js
-5. **Verify output quality** matches reference examples
+5. **Verify posts use 500 characters (NOT 280!)**
 6. **Test full integration** with Notion webhook
 
-If everything works, you should see multiple high-quality tweet concepts generated automatically, each in its own Notion page, all matching the quality standards from your demo.
+If everything works, you should see multiple high-quality tweet concepts generated automatically, each in its own Notion page, with posts using the full 500-character limit.
 
 ## Questions?
 
@@ -187,6 +173,6 @@ If the skill doesn't behave as expected:
 1. Check Railway logs for errors
 2. Verify skill ID is correct in environment
 3. Test with test-with-content.js to isolate issues
-4. Check that all reference files were uploaded with the skill
+4. Verify posts are using 500 characters, not cutting off at 280
 
-The skill is designed to be self-contained and require no system prompt overrides. All the heavy lifting happens within the skill itself.
+The skill is designed to be self-contained and require no system prompt overrides. All the heavy lifting happens within the skill itself, with strong emphasis on the 500-character limit.
