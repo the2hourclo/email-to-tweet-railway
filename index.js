@@ -97,10 +97,10 @@ app.get('/', (req, res) => {
     });
   }
 
-  res.json({ 
+  res.json({
     message: 'Railway Email-to-Tweet Automation Server',
     status: 'healthy',
-    version: '14.0 - Multi-Pass Generation System',
+    version: '15.0 - Skills API Integration',
     endpoints: {
       health: '/',
       webhook: '/webhook'
@@ -113,6 +113,8 @@ app.get('/', (req, res) => {
         modelName: process.env.CLAUDE_MODEL_NAME ? process.env.CLAUDE_MODEL_NAME : 'Missing',
         promptPage: process.env.PROMPT_PAGE_ID || 'Default Prompt',
         newsletterLink: process.env.NEWSLETTER_LINK || 'Not Set',
+        skillsApiEnabled: process.env.USE_SKILLS_API === 'true' ? 'ENABLED' : 'DISABLED',
+        skillId: process.env.CONTENT_TO_TWEETS_SKILL_ID || 'skill_01SALXgCNgsvghBCYiczfhWW',
         multiPassEnabled: process.env.ENABLE_MULTIPASS || 'false',
     },
     timestamp: new Date().toISOString()
@@ -287,33 +289,53 @@ async function processEmailAutomation(pageId) {
   }
 }
 
-// ENHANCED: Multi-pass tweet generation with quality improvement
+// ENHANCED: Tweet generation using Skills API
 async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
+  const useSkillsAPI = process.env.USE_SKILLS_API === 'true';
+  const skillId = process.env.CONTENT_TO_TWEETS_SKILL_ID || 'skill_01SALXgCNgsvghBCYiczfhWW';
+
+  if (useSkillsAPI) {
+    console.log('🎯 Using Skills API for tweet generation');
+    console.log(`📦 Skill ID: ${skillId}`);
+
+    try {
+      // Call the Skills API
+      const result = await generateTweetsWithSkills(emailContent, prompt, skillId);
+      console.log('✅ Skills API Generation Complete');
+      return result;
+
+    } catch (error) {
+      console.error('❌ Skills API generation failed, falling back to direct API:', error);
+      // Fall through to direct API generation
+    }
+  }
+
+  // Fallback to multi-pass or single-pass generation
   const useMultiPass = process.env.ENABLE_MULTIPASS === 'true';
-  
+
   if (useMultiPass) {
     console.log('🎯 Using Multi-Pass Generation System');
     try {
       // Set the base prompt on the generator
       contentGenerator.basePrompt = prompt;
-      
+
       // Use multi-pass generation
       const result = await contentGenerator.generateTweetsWithMultiPass(
-        emailContent, 
+        emailContent,
         process.env.NEWSLETTER_LINK
       );
-      
+
       console.log('✅ Multi-Pass Generation Complete');
       return result;
-      
+
     } catch (error) {
       console.error('❌ Multi-pass generation failed, falling back to single-pass:', error);
       // Fall through to single-pass generation
     }
   }
-  
+
   console.log('⚡ Using Single-Pass Generation');
-  
+
   // FIXED: Enhanced single-pass prompt with strict JSON requirements
   const enhancedPrompt = `
 CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown formatting, no text before or after the JSON.
@@ -337,13 +359,13 @@ Your response must be exactly this JSON format with no additional text:
     }
   ]
 }`;
-  
+
   // Original single-pass approach (fallback or when multi-pass disabled)
   const response = await anthropic.messages.create({
     model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
     max_tokens: 4000,
-    messages: [{ 
-      role: 'user', 
+    messages: [{
+      role: 'user',
       content: enhancedPrompt
     }]
   });
@@ -355,6 +377,68 @@ Your response must be exactly this JSON format with no additional text:
     console.error('❌ JSON parsing failed in single-pass generation');
     console.error('Raw response:', response.content[0].text.substring(0, 300) + '...');
     throw new Error('Failed to parse generation response');
+  }
+}
+
+// NEW: Generate tweets using the Skills API
+async function generateTweetsWithSkills(emailContent, prompt, skillId) {
+  try {
+    console.log('🚀 Calling Skills API...');
+
+    // Prepare the input for the skill
+    const skillInput = {
+      emailContent: emailContent,
+      prompt: prompt,
+      newsletterLink: process.env.NEWSLETTER_LINK || ''
+    };
+
+    // Make the Skills API request using fetch
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-beta': 'skills-2025-10-02',
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
+        max_tokens: 4000,
+        skill_id: skillId,
+        messages: [{
+          role: 'user',
+          content: JSON.stringify(skillInput)
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Skills API HTTP ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Skills API response received');
+
+    // Extract the content from the response
+    if (!data.content || !data.content[0] || !data.content[0].text) {
+      throw new Error('Invalid response format from Skills API');
+    }
+
+    const resultText = data.content[0].text;
+
+    // Parse the JSON response
+    try {
+      return extractJSON(resultText);
+    } catch (e) {
+      console.error('❌ JSON parsing failed in Skills API response');
+      console.error('Raw response:', resultText.substring(0, 300) + '...');
+      throw new Error('Failed to parse Skills API response');
+    }
+
+  } catch (error) {
+    console.error('❌ Skills API error:', error.message);
+    throw error;
   }
 }
 
@@ -822,8 +906,12 @@ if (!validateEnvironment()) {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Email-to-Tweet server running on port ${PORT}`);
-  console.log(`🔧 Version: 14.0 - Multi-Pass Generation System`);
+  console.log(`🔧 Version: 15.0 - Skills API Integration`);
   console.log(`📝 Using prompt from Notion page: ${process.env.PROMPT_PAGE_ID || 'Simplified fallback'}`);
   console.log(`🔗 Newsletter link: ${process.env.NEWSLETTER_LINK || 'Not set'}`);
+  console.log(`🎯 Skills API: ${process.env.USE_SKILLS_API === 'true' ? 'ENABLED' : 'DISABLED'}`);
+  if (process.env.USE_SKILLS_API === 'true') {
+    console.log(`📦 Skill ID: ${process.env.CONTENT_TO_TWEETS_SKILL_ID || 'skill_01SALXgCNgsvghBCYiczfhWW'}`);
+  }
   console.log(`🎯 Multi-Pass Generation: ${process.env.ENABLE_MULTIPASS === 'true' ? 'ENABLED' : 'DISABLED'}`);
 });
