@@ -420,12 +420,19 @@ Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
     }
 
     console.log('📝 Raw skill output length:', resultText.length, 'characters');
+    console.log('📝 First 500 chars of output:', resultText.substring(0, 500));
+    console.log('📝 Last 500 chars of output:', resultText.substring(Math.max(0, resultText.length - 500)));
 
     // Parse the markdown output from the skill
     // The skill returns formatted tweet threads in markdown with code blocks
     const tweetConcepts = parseSkillMarkdownOutput(resultText);
 
     console.log(`✅ Parsed ${tweetConcepts.length} tweet concepts from skill output`);
+
+    if (tweetConcepts.length === 0) {
+      console.log('⚠️  No concepts parsed. Full output:');
+      console.log(resultText);
+    }
 
     return { tweetConcepts };
 
