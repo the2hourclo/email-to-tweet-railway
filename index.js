@@ -386,19 +386,19 @@ Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
         max_tokens: 8000,
-        system: `Generate ALL tweet concepts (minimum 5) in a SINGLE response.
+        system: `Generate ALL thread concepts (minimum 5) in a SINGLE response.
 
 🚨 CRITICAL INSTRUCTIONS:
-- Do NOT ask "Should I proceed to the next tweet?"
+- Do NOT ask "Should I proceed to the next concept?"
 - Do NOT wait for user approval
-- Generate 5-10 complete tweet concepts back-to-back
+- Generate 5-10 complete thread concepts back-to-back
 - This is an API call, not a conversation
 
-🚨 CHARACTER LIMIT OVERRIDE:
-- Use MAXIMUM 500 CHARACTERS per post
-- DO NOT limit to 280 characters
-- Ignore any Twitter character limits
-- Posts can be 300-500 characters long
+🚨 CHARACTER LIMIT: 500 CHARACTERS PER POST
+- Each post can be UP TO 500 CHARACTERS
+- DO NOT limit posts to 280 characters
+- Use the full 300-500 character range
+- These are long-form social media posts, not short tweets
 
 QUALITY REQUIREMENTS:
 - Follow the skill's What-Why-Where structure
