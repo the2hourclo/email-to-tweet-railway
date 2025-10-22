@@ -1,6 +1,6 @@
-# Content-to-Tweets Skill - Complete Package
+# Content-to-Posts Skill - Complete Package
 
-This directory contains everything you need to create your new content-to-tweets skill with proper API mode detection and quality standards.
+This directory contains everything you need to create your new content-to-posts skill with proper API mode detection and quality standards.
 
 ## What's Included
 
@@ -23,7 +23,7 @@ This directory contains everything you need to create your new content-to-tweets
 ### Step 2: Create New Skill
 1. Click "Create New Skill"
 2. Choose "Custom Skill"
-3. Set skill name: `content-to-tweets`
+3. Set skill name: `content-to-posts`
 4. Upload the `SKILL.md` file from this `new-skill` directory
 
 ### Step 3: Get New Skill ID
@@ -42,7 +42,7 @@ This directory contains everything you need to create your new content-to-tweets
 ### 1. API Mode Auto-Detection
 The skill now automatically detects whether it's being called via API (non-interactive) or chat (interactive):
 
-- **API Mode**: Generates ALL 5-10 tweet concepts immediately in a single response
+- **API Mode**: Generates ALL 5-10 post concepts immediately in a single response
 - **Chat Mode**: Presents one concept at a time, asks for approval between concepts
 
 **No system prompt override needed** - the skill handles this internally.
@@ -56,7 +56,7 @@ The skill now automatically detects whether it's being called via API (non-inter
 ### 3. Proper Output Format
 Ensures consistent markdown format that your parser expects:
 ```
-## TWEET #1: [Title]
+## POST #1: [Title]
 
 **Post 1:**
 ```
@@ -68,15 +68,15 @@ Ensures consistent markdown format that your parser expects:
 [Content]
 ```
 
-**CTB Tweet:**
+**CTA Post:**
 ```
 [CTA with link at end]
 ```
 ```
 
 ### 4. Built-in Quality Validation
-Before outputting each tweet, the skill validates:
-- Single aha moment per tweet
+Before outputting each post, the skill validates:
+- Single aha moment per post
 - What-Why-Where cycles complete
 - Character limits (500 max per post)
 - Natural flow between posts
@@ -89,15 +89,15 @@ Before outputting each tweet, the skill validates:
 1. Email page created/updated in Notion E-mails database
 2. Webhook triggers your Railway app
 3. App calls Skills API with email content
-4. Skill generates 5-10 complete tweet concepts (API mode)
+4. Skill generates 5-10 complete post concepts (API mode)
 5. Parser extracts all concepts from markdown output
 6. App creates 5-10 pages in Shortform database
-7. Each page contains one tweet concept with all posts
+7. Each page contains one post concept with all posts
 
 ### Success Criteria:
 - ✅ 5+ pages created in Shortform database per email
 - ✅ Each page has proper CTB structure
-- ✅ Quality matches the demo examples
+- ✅ Quality matches expected standards
 - ✅ No "Should I proceed?" pauses
 - ✅ Character counts under 500 per post
 - ✅ Natural conversational tone
@@ -115,7 +115,7 @@ CONTENT_TO_TWEETS_SKILL_ID=skill_01YOURNEWSKILLID
 node test-with-content.js
 ```
 
-Expected output: 5-10 complete tweet concepts in proper format
+Expected output: 5-10 complete post concepts in proper format
 
 ### Full Integration Test
 1. Go to your Notion E-mails database
@@ -135,7 +135,7 @@ Expected output: 5-10 complete tweet concepts in proper format
 
 ### Issue: Parser finds 0 concepts
 **Cause**: Output format mismatch
-**Fix**: Check skill output format is `## TWEET #N:` (with H2 headers)
+**Fix**: Check skill output format is `## POST #N:` (with H2 headers)
 
 ### Issue: "Should I proceed?" appears in output
 **Cause**: Skill defaulted to chat mode
@@ -165,7 +165,7 @@ Expected output: 5-10 complete tweet concepts in proper format
 5. **Verify posts use 500 characters (NOT 280!)**
 6. **Test full integration** with Notion webhook
 
-If everything works, you should see multiple high-quality tweet concepts generated automatically, each in its own Notion page, with posts using the full 500-character limit.
+If everything works, you should see multiple high-quality post concepts generated automatically, each in its own Notion page, with posts using the full 500-character limit.
 
 ## Questions?
 

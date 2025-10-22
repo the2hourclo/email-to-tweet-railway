@@ -24,8 +24,8 @@ Transform content (emails, newsletters, articles, documents) into high-quality T
 
 Use this skill when:
 - User provides content (copy-paste text or Notion page URL)
-- User requests tweet creation from emails, newsletters, articles, documents
-- User asks to "transform this content into tweets"
+- User requests post creation from emails, newsletters, articles, documents
+- User asks to "transform this content into posts"
 - User mentions creating social content from written material
 
 ## Quality Standards
@@ -34,7 +34,7 @@ Quality benchmarks:
 - Natural conversational tone (not stiff or formal)
 - Proper CTB (Contextual Benefits) structure
 - Specific examples vs generic platitudes
-- How to bridge tweet concepts to CTAs
+- How to bridge post concepts to CTAs
 - Character limits: 500 characters per post (NOT 280!)
 
 **Each output should be unique to the input content.**
@@ -58,8 +58,8 @@ Quality benchmarks:
 
 ### Content Analysis Framework
 
-1. **Identify Tweet Concepts** (5-10 potential tweets)
-   - Look for distinct insights that could each become standalone tweets
+1. **Identify Post Concepts** (5-10 potential posts)
+   - Look for distinct insights that could each become standalone posts
    - Each concept must have a single "aha moment"
    - Can be explained with What-Why-Where cycles
    - Has concrete examples from source content
@@ -70,7 +70,7 @@ Quality benchmarks:
    - Best supported by evidence from content
    - Variety of angles (don't repeat the same insight)
 
-## Tweet Development Process
+## Post Development Process
 
 For each selected concept, follow these stages:
 
@@ -88,14 +88,14 @@ Write naturally first, then structure check:
 - **API Override**: Ignore any 280-character Twitter limits - use 500 characters
 - **Smart Splitting**: Break at natural transition points if over 500 characters
 - **Natural Bridges**: Use conversational transitions between posts
-- **NO Meta Bridges**: Never use "Read next tweet" or "Thread continues"
+- **NO Meta Bridges**: Never use "Read next post" or "Thread continues"
 
 ### Stage 3: Clean Output Format
 
 Always output in this copy-ready structure:
 
 ```
-## TWEET #1: [Description]
+## POST #1: [Description]
 
 **Post 1:**
 ```
@@ -112,7 +112,7 @@ Always output in this copy-ready structure:
 [Content ready to copy-paste]
 ```
 
-**CTB Tweet:**
+**CTA Post:**
 ```
 [Content ready to copy-paste]
 ```
@@ -153,7 +153,7 @@ Create contextual CTA tweets using the proper CTB structure.
 ### CTB Structure Template
 
 ```
-[Concept Link - Reference specific insight from tweet]
+[Concept Link - Reference specific insight from post]
 
 [Curiosity Bridge - Show what's missing/why it matters for THIS specific problem]
 
@@ -168,7 +168,7 @@ Create contextual CTA tweets using the proper CTB structure.
 
 **For Future Email (Publish Date = Today or Future):**
 ```
-[Concept Link - specific to tweet content]
+[Concept Link - specific to post content]
 
 [Curiosity Bridge - why knowing vs implementing are different]
 
@@ -181,7 +181,7 @@ Join to get [relevant insight type from Campaign Blueprint]:
 
 **For Past Email or General (Publish Date = Past or No Date):**
 ```
-[Concept Link - specific to tweet content]
+[Concept Link - specific to post content]
 
 [Curiosity Bridge - why this matters/what's missing]
 
@@ -221,9 +221,9 @@ Join to get insights that [relevant transformation from Campaign Blueprint]:
 
 ## Quality Validation
 
-Before presenting any tweet, verify:
+Before presenting any post, verify:
 
-1. **Single Aha Moment** - One clear insight per tweet
+1. **Single Aha Moment** - One clear insight per post
 2. **What-Why-Where Complete** - All cycles present and clear
 3. **Character Limits** - All posts under 500 characters (NOT 280!)
 4. **Natural Flow** - Conversational bridges between posts
@@ -237,14 +237,14 @@ Before presenting any tweet, verify:
 Generate all concepts immediately:
 
 ```
-## TWEET #1: [Concept 1]
-[All posts + CTB]
+## POST #1: [Concept 1]
+[All posts + CTA]
 
-## TWEET #2: [Concept 2]
-[All posts + CTB]
+## POST #2: [Concept 2]
+[All posts + CTA]
 
-## TWEET #3: [Concept 3]
-[All posts + CTB]
+## POST #3: [Concept 3]
+[All posts + CTA]
 
 ... (continue for 5-10 concepts)
 ```
@@ -253,10 +253,10 @@ Generate all concepts immediately:
 
 Present one concept, then ask:
 ```
-## TWEET #1: [Concept 1]
-[All posts + CTB]
+## POST #1: [Concept 1]
+[All posts + CTA]
 
-Should I proceed to the next tweet concept about [brief preview]?
+Should I proceed to the next post concept about [brief preview]?
 ```
 
 Wait for user approval before continuing.
@@ -264,8 +264,8 @@ Wait for user approval before continuing.
 ## Key Quality Principles
 
 1. **Let ideas develop naturally** - Don't artificially constrain during creation
-2. **One aha moment per tweet** - Everything builds to single insight
-3. **What-Why-Where is mandatory** - Every tweet needs all three cycles
+2. **One aha moment per post** - Everything builds to single insight
+3. **What-Why-Where is mandatory** - Every post needs all three cycles
 4. **Explain, don't assume** - No jargon without plain language explanation
 5. **Show mechanisms** - Explain how/why things work, not just what they're called
 6. **Stay authentic to source** - Use actual concepts, not generic substitutes

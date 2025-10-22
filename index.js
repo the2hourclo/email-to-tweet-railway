@@ -288,11 +288,11 @@ async function processEmailAutomation(pageId) {
   }
 }
 
-// SKILLS API ONLY: Tweet generation using Skills API exclusively
+// SKILLS API ONLY: Post generation using Skills API exclusively
 async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
   const skillId = process.env.CONTENT_TO_TWEETS_SKILL_ID || 'skill_01SALXgCNgsvghBCYiczfhWW';
 
-  console.log('🎯 Using Skills API for tweet generation');
+  console.log('🎯 Using Skills API for post generation');
   console.log(`📦 Skill ID: ${skillId}`);
 
   // Call the Skills API - no fallbacks
@@ -301,19 +301,19 @@ async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
   return result;
 }
 
-// NEW: Parse markdown output from the skill into structured tweet concepts
+// NEW: Parse markdown output from the skill into structured post concepts
 function parseSkillMarkdownOutput(markdown) {
   const concepts = [];
 
-  // Try both formats: ## TWEET # (H2) and **TWEET # (bold)
-  let tweetSections = markdown.split(/##\s*TWEET\s*#(\d+):/);
+  // Try both formats: ## POST # (H2) and **POST # (bold)
+  let tweetSections = markdown.split(/##\s*POST\s*#(\d+):/);
 
   // If no H2 headers found, try bold format
   if (tweetSections.length < 3) {
-    tweetSections = markdown.split(/\*\*TWEET\s*#(\d+):/);
+    tweetSections = markdown.split(/\*\*POST\s*#(\d+):/);
   }
 
-  // Process each tweet section (skip first element which is intro text)
+  // Process each post section (skip first element which is intro text)
   for (let i = 1; i < tweetSections.length; i += 2) {
     const number = parseInt(tweetSections[i]);
     const content = tweetSections[i + 1];
@@ -328,7 +328,7 @@ function parseSkillMarkdownOutput(markdown) {
     title = title.replace(/^\*\*|\*\*$/g, '').trim();
 
     if (!title) {
-      title = `Tweet Concept ${number}`;
+      title = `Post Concept ${number}`;
     }
 
     // Extract all posts (content between ``` markers)
@@ -435,10 +435,10 @@ async function generateTweetsWithSkills(emailContent, prompt, skillId) {
     console.log('📝 Last 500 chars of output:', resultText.substring(Math.max(0, resultText.length - 500)));
 
     // Parse the markdown output from the skill
-    // The skill returns formatted tweet threads in markdown with code blocks
+    // The skill returns formatted post threads in markdown with code blocks
     const tweetConcepts = parseSkillMarkdownOutput(resultText);
 
-    console.log(`✅ Parsed ${tweetConcepts.length} tweet concepts from skill output`);
+    console.log(`✅ Parsed ${tweetConcepts.length} post concepts from skill output`);
 
     if (tweetConcepts.length === 0) {
       console.log('⚠️  No concepts parsed. Full output:');
