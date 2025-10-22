@@ -305,8 +305,13 @@ async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
 function parseSkillMarkdownOutput(markdown) {
   const concepts = [];
 
-  // Split by **TWEET # markers (skill uses bold, not H2)
-  const tweetSections = markdown.split(/\*\*TWEET\s*#(\d+):/);
+  // Try both formats: ## TWEET # (H2) and **TWEET # (bold)
+  let tweetSections = markdown.split(/##\s*TWEET\s*#(\d+):/);
+
+  // If no H2 headers found, try bold format
+  if (tweetSections.length < 3) {
+    tweetSections = markdown.split(/\*\*TWEET\s*#(\d+):/);
+  }
 
   // Process each tweet section (skip first element which is intro text)
   for (let i = 1; i < tweetSections.length; i += 2) {
@@ -315,9 +320,16 @@ function parseSkillMarkdownOutput(markdown) {
 
     if (!content) continue;
 
-    // Extract title from first line (after the ** closing)
-    const titleMatch = content.match(/^\*\*\s*(.+?)\n/);
-    const title = titleMatch ? titleMatch[1].trim() : `Tweet Concept ${number}`;
+    // Extract title from first line
+    const lines = content.trim().split('\n');
+    let title = lines[0].trim();
+
+    // Remove ** if present (for bold format)
+    title = title.replace(/^\*\*|\*\*$/g, '').trim();
+
+    if (!title) {
+      title = `Tweet Concept ${number}`;
+    }
 
     // Extract all posts (content between ``` markers)
     const posts = [];
@@ -372,8 +384,38 @@ async function generateTweetsWithSkills(emailContent, prompt, skillId) {
       },
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
-        max_tokens: 8000, // Increased for multiple tweet options
-        system: "Generate ALL tweet concepts (5+) in a single response. Do not ask 'Should I proceed?' - create all concepts immediately without waiting for user approval. This is an API call, not a chat conversation.",
+        max_tokens: 8000,
+        system: `Generate ALL tweet concepts (minimum 5) in a SINGLE response.
+
+CRITICAL INSTRUCTIONS:
+- Do NOT ask "Should I proceed to the next tweet?"
+- Do NOT wait for user approval
+- Generate 5-10 complete tweet concepts back-to-back
+- This is an API call, not a conversation
+
+OUTPUT FORMAT:
+Use ## TWEET #N: for headers (H2 markdown)
+Use **Post N:** for post labels (bold markdown)
+
+Example structure:
+## TWEET #1: Concept Title
+
+**Post 1:**
+\`\`\`
+Tweet content here
+\`\`\`
+
+**Post 2:**
+\`\`\`
+Tweet content here
+\`\`\`
+
+**CTB Tweet:**
+\`\`\`
+CTA content here
+\`\`\`
+
+Generate ALL concepts immediately without pausing.`,
         tools: [{
           type: 'code_execution_20250825',
           name: 'code_execution'
