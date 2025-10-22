@@ -386,26 +386,37 @@ Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
         max_tokens: 8000,
-        system: `Generate ALL thread concepts (minimum 5) in a SINGLE response.
+        system: `🚨🚨🚨 CRITICAL: WRITE LONG POSTS (350-500 CHARS EACH) 🚨🚨🚨
 
-🚨 CRITICAL INSTRUCTIONS:
-- Do NOT ask "Should I proceed to the next concept?"
-- Do NOT wait for user approval
-- Generate 5-10 complete thread concepts back-to-back
+MOST IMPORTANT RULE: Every single post MUST be 350-500 characters long.
+
+THIS IS NOT TWITTER. NO 280-CHARACTER LIMIT EXISTS.
+You have 500 characters available. USE THEM.
+
+Posts under 300 characters are DEFECTIVE and UNACCEPTABLE.
+
+BEFORE OUTPUTTING EACH POST:
+1. Count the characters
+2. If under 350 chars → ADD MORE DETAIL, EXAMPLES, CONTEXT
+3. If under 300 chars → COMPLETELY REWRITE IT LONGER
+4. Target: 350-500 characters per post
+
+Why length matters:
+- Platform supports 500 chars (not 280)
+- Short posts waste capacity
+- Detail and examples require space
+- Quality content needs 350-500 chars to develop ideas properly
+
+BATCH GENERATION:
+- Generate ALL 5-10 thread concepts in ONE response
+- Do NOT ask "Should I proceed?"
 - This is an API call, not a conversation
 
-🚨 CHARACTER LIMIT: 500 CHARACTERS PER POST
-- Each post can be UP TO 500 CHARACTERS
-- DO NOT limit posts to 280 characters
-- Use the full 300-500 character range
-- These are long-form social media posts, not short tweets
-
-QUALITY REQUIREMENTS:
-- Follow the skill's What-Why-Where structure
-- Use the skill's CTB (Contextual Benefits) framework
-- Make content specific and actionable (not generic)
-- Include concrete examples from the source content
-- Each concept should have a single clear "aha moment"
+QUALITY:
+- Follow skill's What-Why-Where structure
+- Use skill's CTB framework
+- Include specific examples
+- Each concept has one clear "aha moment"
 
 OUTPUT FORMAT:
 Use ## TWEET #N: for headers (H2 markdown)
