@@ -305,8 +305,8 @@ async function generateTweetsWithEnhancedQuality(emailContent, prompt) {
 function parseSkillMarkdownOutput(markdown) {
   const concepts = [];
 
-  // Split by ## TWEET markers
-  const tweetSections = markdown.split(/##\s*TWEET\s*#(\d+):/);
+  // Split by **TWEET # markers (skill uses bold, not H2)
+  const tweetSections = markdown.split(/\*\*TWEET\s*#(\d+):/);
 
   // Process each tweet section (skip first element which is intro text)
   for (let i = 1; i < tweetSections.length; i += 2) {
@@ -315,9 +315,9 @@ function parseSkillMarkdownOutput(markdown) {
 
     if (!content) continue;
 
-    // Extract title from first line
-    const lines = content.trim().split('\n');
-    const title = lines[0].trim();
+    // Extract title from first line (after the ** closing)
+    const titleMatch = content.match(/^\*\*\s*(.+?)\n/);
+    const title = titleMatch ? titleMatch[1].trim() : `Tweet Concept ${number}`;
 
     // Extract all posts (content between ``` markers)
     const posts = [];
@@ -373,6 +373,7 @@ async function generateTweetsWithSkills(emailContent, prompt, skillId) {
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
         max_tokens: 8000, // Increased for multiple tweet options
+        system: "Generate ALL tweet concepts (5+) in a single response. Do not ask 'Should I proceed?' - create all concepts immediately without waiting for user approval. This is an API call, not a chat conversation.",
         tools: [{
           type: 'code_execution_20250825',
           name: 'code_execution'
