@@ -385,37 +385,6 @@ async function generateTweetsWithSkills(emailContent, prompt, skillId) {
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
         max_tokens: 8000,
-        system: `Generate ALL tweet concepts (minimum 5) in a SINGLE response.
-
-CRITICAL INSTRUCTIONS:
-- Do NOT ask "Should I proceed to the next tweet?"
-- Do NOT wait for user approval
-- Generate 5-10 complete tweet concepts back-to-back
-- This is an API call, not a conversation
-
-OUTPUT FORMAT:
-Use ## TWEET #N: for headers (H2 markdown)
-Use **Post N:** for post labels (bold markdown)
-
-Example structure:
-## TWEET #1: Concept Title
-
-**Post 1:**
-\`\`\`
-Tweet content here
-\`\`\`
-
-**Post 2:**
-\`\`\`
-Tweet content here
-\`\`\`
-
-**CTB Tweet:**
-\`\`\`
-CTA content here
-\`\`\`
-
-Generate ALL concepts immediately without pausing.`,
         tools: [{
           type: 'code_execution_20250825',
           name: 'code_execution'
