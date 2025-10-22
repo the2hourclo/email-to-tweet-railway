@@ -321,7 +321,7 @@ Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: process.env.CLAUDE_MODEL_NAME || 'claude-3-5-sonnet-20241022',
+        model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
         max_tokens: 4000,
         tools: [{
           type: 'code_execution_20250825',
