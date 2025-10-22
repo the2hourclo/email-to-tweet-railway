@@ -358,9 +358,21 @@ async function generateTweetsWithSkills(emailContent, prompt, skillId) {
     console.log('🚀 Calling Skills API with code execution container...');
 
     // Build the user prompt for the skill
-    const userPrompt = `${emailContent}
+    // Be very explicit about what we want - multiple tweet options with full formatting
+    const userPrompt = `Transform this email content into multiple high-quality Twitter thread options (aim for 5+ different tweet concepts).
 
-Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
+For each tweet thread, follow the What-Why-Where cycle and include:
+- Multiple posts (2-3 posts per thread)
+- All posts under 500 characters
+- Proper CTB (Contextual Benefits) structure for the CTA
+- Posts in code blocks for easy copy-paste
+
+EMAIL CONTENT:
+${emailContent}
+
+Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}
+
+Generate multiple complete tweet thread options, each as a separate ## TWEET #N: section with all posts in code blocks.`;
 
     // Make the Skills API request using the container parameter
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -373,7 +385,7 @@ Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
       },
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
-        max_tokens: 4000,
+        max_tokens: 8000, // Increased for multiple tweet options
         tools: [{
           type: 'code_execution_20250825',
           name: 'code_execution'
