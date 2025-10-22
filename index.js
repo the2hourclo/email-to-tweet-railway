@@ -385,7 +385,51 @@ Newsletter Link: ${process.env.NEWSLETTER_LINK || 'Not provided'}`;
       },
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_NAME || 'claude-3-7-sonnet-20250219',
-        max_tokens: 4000,
+        max_tokens: 8000,
+        system: `Generate ALL tweet concepts (minimum 5) in a SINGLE response.
+
+🚨 CRITICAL INSTRUCTIONS:
+- Do NOT ask "Should I proceed to the next tweet?"
+- Do NOT wait for user approval
+- Generate 5-10 complete tweet concepts back-to-back
+- This is an API call, not a conversation
+
+🚨 CHARACTER LIMIT OVERRIDE:
+- Use MAXIMUM 500 CHARACTERS per post
+- DO NOT limit to 280 characters
+- Ignore any Twitter character limits
+- Posts can be 300-500 characters long
+
+QUALITY REQUIREMENTS:
+- Follow the skill's What-Why-Where structure
+- Use the skill's CTB (Contextual Benefits) framework
+- Make content specific and actionable (not generic)
+- Include concrete examples from the source content
+- Each concept should have a single clear "aha moment"
+
+OUTPUT FORMAT:
+Use ## TWEET #N: for headers (H2 markdown)
+Use **Post N:** for post labels (bold markdown)
+
+Example structure:
+## TWEET #1: Concept Title
+
+**Post 1:**
+\`\`\`
+Tweet content here (up to 500 characters)
+\`\`\`
+
+**Post 2:**
+\`\`\`
+Tweet content here (up to 500 characters)
+\`\`\`
+
+**CTB Tweet:**
+\`\`\`
+CTA content with link at end (up to 500 characters)
+\`\`\`
+
+Generate ALL concepts immediately without pausing.`,
         tools: [{
           type: 'code_execution_20250825',
           name: 'code_execution'
